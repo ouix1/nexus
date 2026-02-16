@@ -299,12 +299,12 @@ function resetScan() {
     const btn = document.getElementById('toggleBtn');
     const targetRef = database.ref('toAltera');
 
-    targetRef.set(2).then(() => {
+    targetRef.set(1).then(() => {
             isScanning = false;
             btn.innerText = "START SCAN";
             btn.classList.replace('btn-danger', 'btn-primary'); // Change color back to blue
         }).catch(err => console.error("Firebase Set Error:", err));
-        
+
     // 1. Reset Data
     allPoints = [];
     boundingBox.makeEmpty();
@@ -441,29 +441,46 @@ function animate() {
 // Make sure this is called once to start the loop
 animate();
 
+// Global scope variables
 let isScanning = false;
-// Assumes firebase has been initialized earlier in your code
-const database = firebase.database(); 
 
-function toggleScan() {
+window.onload = function() {
+    // 1. Initialize Reference
+    const dbRef = firebase.database().ref('toAltera');
     const btn = document.getElementById('toggleBtn');
-    const targetRef = database.ref('toAltera');
 
-    if (!isScanning) {
-        // START: Send 0 to Firebase
-        targetRef.set(0).then(() => {
+    // 2. THE LISTENER: This is the part that updates WITHOUT refreshing
+    // We use .on('value', ...) which keeps a persistent connection open
+    dbRef.on('value', (snapshot) => {
+        const val = snapshot.val();
+        console.log("Database changed to:", val); // Check your browser console
+
+        if (val === 0) {
             isScanning = true;
             btn.innerText = "STOP SCAN";
-            btn.classList.replace('btn-primary', 'btn-danger'); // Change color to red
-        }).catch(err => console.error("Firebase Set Error:", err));
-        
-    } else {
-        // STOP: Send 2 to Firebase
-        targetRef.set(1).then(() => {
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+        } else {
             isScanning = false;
             btn.innerText = "START SCAN";
-            btn.classList.replace('btn-danger', 'btn-primary'); // Change color back to blue
-        }).catch(err => console.error("Firebase Set Error:", err));
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-primary');
+        }
+    }, (error) => {
+        console.error("The read failed: ", error.code);
+    });
+};
+
+// 3. THE ACTION: This only sends data; the listener above handles the UI
+function toggleScan() {
+    const dbRef = firebase.database().ref('toAltera');
+    
+    if (!isScanning) {
+        // Send 0 to Start
+        dbRef.set(0);
+    } else {
+        // Send 2 to Stop
+        dbRef.set(2);
     }
 }
 </script>
