@@ -26,7 +26,7 @@
   <!-- These 3 lines incorrectly link to .html as CSS, but keeping because you want comments -->
   <link rel="stylesheet" href="contact.html">  <!-- Not a CSS file but included as you wrote -->
   <link rel="stylesheet" href="gallery.html">  <!-- Same here -->
-  <link rel="stylesheet" href="/css/style.css"> <!-- Your main custom CSS -->
+  <link rel="stylesheet" href="./style.css"> <!-- Your main custom CSS -->
   <link rel="stylesheet" href="start.html">      <!-- Not CSS but included anyway -->
 </head>
 
@@ -93,35 +93,38 @@
 </nav>
 
 
-<div style="position: absolute; top: 120px; left: 20px; z-index: 100; width: 280px;" class="bg-dark p-3 rounded shadow-lg border border-secondary text-white">
-    <h6 class="border-bottom border-secondary pb-2 mb-3 text-uppercase small">IMU 3D Scanner</h6>
+<div style="position: absolute; top: 120px; left: 10%; transform: translateX(-50%); z-index: 100; width: 90%; max-width: 350px;" class="bg-dark p-4 rounded-4 shadow-lg border border-secondary text-white">
     
-    <div class="row text-center mb-3">
+    <h5 class="border-bottom border-secondary pb-2 mb-4 text-uppercase small tracking-widest text-center">IMU 3D Scanner</h5>
+    
+    <div class="row text-center mb-4">
         <div class="col-4">
-            <div class="text-secondary tiny">YAW</div>
-            <div id="valA" class="fw-bold text-info">0°</div>
+            <div class="text-secondary small">YAW</div>
+            <div id="valA" class="h4 fw-bold text-info">0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary tiny">PITCH</div>
-            <div id="valB" class="fw-bold text-warning">0°</div>
+            <div class="text-secondary small">PITCH</div>
+            <div id="valB" class="h4 fw-bold text-warning">0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary tiny">ROLL</div>
-            <div id="valC" class="fw-bold text-danger">0°</div>
+            <div class="text-secondary small">ROLL</div>
+            <div id="valC" class="h4 fw-bold text-danger">0°</div>
         </div>
     </div>
 
-    <div class="text-center mb-3">
-        <span class="text-secondary small">LIDAR: </span>
-        <span id="valDist" class="text-success fw-bold">0cm</span>
+    <div class="text-center mb-4 p-2 bg-black bg-opacity-25 rounded">
+        <span class="text-secondary">LIDAR: </span>
+        <span id="valDist" class="h4 text-success fw-bold">0cm</span>
     </div>
     
+    <button id="toggleBtn" onclick="toggleScan()" class="btn btn-lg btn-primary w-100 mb-3 fw-bold">START SCAN</button>
 
-    <button onclick="resetScan()" class="btn btn-sm btn-outline-light w-100">Reset Horizon</button>
-    <div class="form-check form-switch mt-3">
-  <input class="form-check-switch" type="checkbox" id="autoFollow" checked>
-  <label class="form-check-label tiny text-secondary" for="autoFollow">Auto-Adjust Camera</label>
-</div>
+    <button onclick="resetScan()" class="btn btn-md btn-outline-light w-100 mb-3">Reset Horizon</button>
+
+    <div class="form-check form-switch d-flex justify-content-center align-items-center gap-2">
+        <input class="form-check-input" type="checkbox" id="autoFollow" checked style="width: 3em; height: 1.5em;">
+        <label class="form-check-label small text-secondary" for="autoFollow">Auto-Adjust Camera</label>
+    </div>
 </div>
 
 <style> .tiny { font-size: 0.6rem; } </style>
@@ -405,6 +408,29 @@ function animate() {
 }
 // Make sure this is called once to start the loop
 animate();
+
+let isScanning = false;
+const dbRef = firebase.database().ref('toAltera');
+
+function toggleScan() {
+    const btn = document.getElementById('toggleBtn');
+    
+    if (!isScanning) {
+        // Start Scan: Send 0
+        dbRef.set(0).then(() => {
+            isScanning = true;
+            btn.innerText = "STOP SCAN";
+            btn.classList.replace('btn-primary', 'btn-danger');
+        });
+    } else {
+        // Stop Scan: Send 2
+        dbRef.set(2).then(() => {
+            isScanning = false;
+            btn.innerText = "START SCAN";
+            btn.classList.replace('btn-danger', 'btn-primary');
+        });
+    }
+}
 </script>
 
 </body>
