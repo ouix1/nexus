@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <link rel="stylesheet" href="contact.html">
+    <link rel="stylesheet" href="gallery.html">
+    <link rel="stylesheet" href="/css/style.css">
+    <title>Nexus</title>
+
+
+
+  </head>
+  <body>
+        <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-auth-compat.js"></script>
+    <script type="module">
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
+      // TODO: Add SDKs for Firebase products that you want to use
+      // https://firebase.google.com/docs/web/setup#available-libraries
+
+      // Your web app's Firebase configuration
+      // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      const firebaseConfig = {
+        apiKey: "AIzaSyDr5USKStzLZ6OQCfTBbZBmqihhbpBNmCY",
+        authDomain: "dsc-dba80.firebaseapp.com",
+        projectId: "dsc-dba80",
+        storageBucket: "dsc-dba80.firebasestorage.app",
+        messagingSenderId: "631849635750",
+        appId: "1:631849635750:web:6a43bd500ffef3cced0967",
+        measurementId: "G-T7H2VFC56J"
+      };
+
+      // Initialize Firebase
+      //const app = initializeApp(firebaseConfig);
+      //const analytics = getAnalytics(app);
+
+      firebase.initializeApp(firebaseConfig);
+      firebase.auth().onAuthStateChanged(user => {
+  if (user) {
+    console.log("LOGGED IN");
+ 
+    document.getElementById("startdiv").classList.remove("d-none");
+  } else {
+    console.log("NOT LOGGED IN");
+  
+    document.getElementById("startdiv").classList.add("d-none");
+  }
+});
+  </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="home.html">ne<span style="color: #0d6efd">x</span>us</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse fw-bold" id="navbarSupportedContent">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link " aria-current="page" href="home.html">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link active" href="gallery.html">gallery</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="Our_team.html">Our Team</a>
+        </li>
+        <li>
+          <button type="button" class="nav-link btn btn-dark fw-bold" data-bs-toggle="modal" data-bs-target="#contactModal">
+              Contact
+          </button>
+        </li>
+        <li class="nav-item" id="startdiv">
+          <a class="nav-link" href="start.html">Lidar_scanner</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+
+    <div class="carousel-inner">
+        <div class="carousel-item active bg-dark text-light text-center py-5 ">
+            <div class="carousel-caption d-none d-md-block">
+                <h1 class="fw-bold" style="font-size: 200%;">Parts</h1>
+            </div>
+        </div>
+    </div>
+    <section class="bg-dark text-light py-3">
+  <div class="album py-5 bg-secondary">
+    <div class="container">
+
+      <div class="row row-cols-5 row-cols-sm-2 row-cols-md-3 g-4 text-dark row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4 ">
+        <div class="col "> 
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">Tf Luna lidar</p>
+            <a href="https://www.mybotshop.de/Datasheet/Benewake_TF-Luna_Datasheet.pdf"><img  width="100%" height="225" src="https://i.ytimg.com/vi/SJCnLY4onWc/maxresdefault.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">Servo Motor</p>
+            <a href="https://handsontec.com/dataspecs/motor_fan/SG90-Servo.pdf"><img width="100%" height="225" src="https://www.electricaltechnology.org/wp-content/uploads/2019/05/Construction-of-Servo-Motor.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">gyroscope</p>
+            <a href="https://www.st.com/resource/en/datasheet/a3g4250d.pdf"><img width="100%" height="225" src="https://i0.wp.com/randomnerdtutorials.com/wp-content/uploads/2020/12/MPU6050-Module-Accelerometer-Gyroscope-Temperature-Sensor.jpg?resize=750%2C422&quality=100&strip=all&ssl=1" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">ESP32</p>
+            <a href="https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf"><img width="100%" height="225" src="https://www.electronicwings.com/storage/PlatformSection/TopicContent/421/icon/ESP32%20Interduction%20Banner%20Image.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small" >click on the image for an explanation</p>
+
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">Altera</p>
+            <a href="https://mm.digikey.com/Volume0/opasdata/d220001/medias/docus/5561/Intel®_MAX®_10%20FPGA_Device_Datasheet.pdf"><img width="100%" height="225" src="https://i.ebayimg.com/images/g/9bkAAOSwLmVkXJLJ/s-l1200.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">Piezoelectric Buzzer</p>
+            <a href="https://www.mouser.com/datasheet/2/400/ef532_ps-13444.pdf?srsltid=AfmBOoonPC2tikCG3IytFfOTJy0yGOLd3Khiyy7oDjnA3Sx4LO2hNsp-"><img width="100%" height="225" src="https://thumbs.dreamstime.com/b/icon-piezoelectric-buzzer-notifications-icon-designed-piezoelectric-buzzer-focused-notifications-359737140.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">ULN2003</p>
+            <a href="https://www.st.com/resource/en/datasheet/uln2001.pdf"><img width="100%" height="225" src="https://hobbycomponents.com/2173-large_default/stepper-motor-and-uln2003-driver-board.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">Step Motor 4 Phase</p>
+            <a href="https://www.mouser.com/datasheet/2/758/stepd-01-data-sheet-1143075.pdf?srsltid=AfmBOooUT_rIvQMKY9cFJTLod_fjQi4pBYWrM5cqHTa7GbNf_OHD8h-j"><img width="100%" height="225" src="https://www.oyostepper.com/images/202003/goods_img/664_G_1584006695282.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+                <div class="col">
+          <div class="card shadow-lg hover-zoom border-0 rounded-3">
+            <p class="text-center fw-bold">LM7805</p>
+            <a href="https://cdn.sparkfun.com/assets/1/7/7/3/2/LM7805.pdf"><img width="100%" height="225" src="https://www.watelectronics.com/wp-content/uploads/7805-Voltage-Regulator.jpg" alt=""></a>
+            <div class="card-body">
+              <p class="card-text text-muted small">click on the image for an explanation</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</section>
+<footer class="mt-auto w-100">
+    <div class="bg-dark text-light text-center footer py-3 bottom-0 start-0 w-100">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <p class="mb-0 ms-3">&copy; 2025 Nexus</p>
+            <button type="button" class="btn btn-dark me-3 my-2" data-bs-toggle="modal" data-bs-target="#contactModal">
+                Contact
+            </button>
+        </div>
+
+    </div>
+ <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="contactModalLabel">Send a Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Your Name</label>
+                            <input type="text" class="form-control" id="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Your Email</label>
+                            <input type="email" class="form-control" id="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="message" class="form-label">Message</label>
+                            <textarea class="form-control" id="message" rows="4" required></textarea>
+                        </div>
+                            <div>
+                            <label class="form-label mt-3">Reason for contact</label>
+                            <div class="d-flex gap-2 flex-column">
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleStudent">
+                                  cant log in
+                                </label>
+                              </div>
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleTeacher">
+                                  found our project interesting
+                                </label>
+                              </div>
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleBusiness">
+                                  bug report
+                                </label>
+                              </div>
+                              
+                            </div>
+                        </div>
+
+                          <button type="submit" class="btn btn-outline-primary w-100 mt-3">Send</button>
+
+                        
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+<script src="/java/script.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+<script>
+  
+  
+</script>
+</body>
+</html>

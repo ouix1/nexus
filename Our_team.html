@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <link rel="stylesheet" href="contact.html">
+    <link rel="stylesheet" href="gallery.html">
+    <link rel="stylesheet" href="/css/style.css">
+    <title>Nexus</title>
+  </head>
+  <body>
+            <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-auth-compat.js"></script>
+    <script type="module">
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
+      import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-analytics.js";
+      // TODO: Add SDKs for Firebase products that you want to use
+      // https://firebase.google.com/docs/web/setup#available-libraries
+
+      // Your web app's Firebase configuration
+      // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+      const firebaseConfig = {
+        apiKey: "AIzaSyDr5USKStzLZ6OQCfTBbZBmqihhbpBNmCY",
+        authDomain: "dsc-dba80.firebaseapp.com",
+        projectId: "dsc-dba80",
+        storageBucket: "dsc-dba80.firebasestorage.app",
+        messagingSenderId: "631849635750",
+        appId: "1:631849635750:web:6a43bd500ffef3cced0967",
+        measurementId: "G-T7H2VFC56J"
+      };
+
+      // Initialize Firebase
+      //const app = initializeApp(firebaseConfig);
+      //const analytics = getAnalytics(app);
+
+      firebase.initializeApp(firebaseConfig);
+
+firebase.auth().onAuthStateChanged(user => {
+  if (user) {
+    console.log("LOGGED IN");
+
+    document.getElementById("startdiv").classList.remove("d-none");
+
+  } else {
+    console.log("NOT LOGGED IN");
+
+    document.getElementById("startdiv").classList.add("d-none");
+
+  }
+});
+  </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="home.html">ne<span style="color: #0d6efd">x</span>us</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse fw-bold" id="navbarSupportedContent">
+      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link " aria-current="page" href="home.html">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="gallery.html">gallery</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link active" href="Our_team.html">Our Team</a>
+        </li>
+        <li>
+          <button type="button" class="nav-link btn btn-dark fw-bold" data-bs-toggle="modal" data-bs-target="#contactModal">
+              Contact
+          </button>
+        </li>
+        <li class="nav-item" id="startdiv">
+          <a class="nav-link" href="start.html">Lidar_scanner</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</nav>
+  <header class="bg-dark text-light text-center py-5 ">
+    <div class="container">
+      <h1 class="display-5 fw-bold">Meet Our Team</h1>
+      <p class="lead ">The creative minds behind Nexus</p>
+    </div>
+  </header>
+<div class="bg-secondary text-center p-3">
+
+
+    <section class="container my-5 bg-dark text-light p-3 rounded text-center my-5 shadow-lg rounded">
+      <div class="container">
+
+        <!-- Three columns of text below the carousel -->
+        <div class="row">
+          <div class="col-lg-6 content-center g-5 ">
+            <img class="rounded-circle border border-primary-subtle border-3" style="" width="30%" src="https://www.buzzsprout.com/rails/active_storage/representations/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSktYYndFPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--35117d0d344b965b35fa877fe52f449a6a4f561c/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaDdDVG9MWm05eWJXRjBPZ2hxY0djNkUzSmxjMmw2WlY5MGIxOW1hV3hzV3docEFsZ0NhUUpZQW5zR09nbGpjbTl3T2d0alpXNTBjbVU2Q25OaGRtVnlld1k2REhGMVlXeHBkSGxwUVRvUVkyOXNiM1Z5YzNCaFkyVkpJZ2x6Y21kaUJqb0dSVlE9IiwiZXhwIjpudWxsLCJwdXIiOiJ2YXJpYXRpb24ifX0=--1924d851274c06c8fa0acdfeffb43489fc4a7fcc/Robbie's%20Random%20AF%202.jpg" alt="">
+            <h2 class="fw-bold">Lior Suriu</h2>
+            <p class="text-muted small">Lead Engineer & System Designer</p>
+          </div><!-- /.col-lg-4 -->
+          <div class="col-lg-6 content-center g-5 ">
+            <img class="rounded-circle border border-primary-subtle border-3" width="30%" src="https://media.tenor.com/24ZQ7hgjYjcAAAAe/anuc.png" alt="">
+            <h2 class="fw-bold ">Tomer Motoshkov</h2>
+            <p class="text-muted small">Hardware Developer & Software Integrator</p>
+
+          </div><!-- /.col-lg-4 -->
+        </div><!-- /.row -->
+
+      <hr class="border-secondary my-5 w-75 mx-auto">
+        <!-- START THE FEATURETTES -->
+        <div class="row featurette">
+          <div class="col-md-7 mt-auto mb-auto">
+            <h2 class="featurette-heading mb-3 fw-bold">First featurette heading. <span class="text-muted">Itll blow your mind.</span></h2>
+            <p class="lead fs-6">Some great placeholder content for the first featurette here. Imagine some exciting prose here.</p>
+          </div>
+          <div class="col-md-5">
+            <img class="img-fluid rounded shadow" width="100%" class="mb-4" src="https://www.buzzsprout.com/rails/active_storage/representations/redirect/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaHBCSktYYndFPSIsImV4cCI6bnVsbCwicHVyIjoiYmxvYl9pZCJ9fQ==--35117d0d344b965b35fa877fe52f449a6a4f561c/eyJfcmFpbHMiOnsibWVzc2FnZSI6IkJBaDdDVG9MWm05eWJXRjBPZ2hxY0djNkUzSmxjMmw2WlY5MGIxOW1hV3hzV3docEFsZ0NhUUpZQW5zR09nbGpjbTl3T2d0alpXNTBjbVU2Q25OaGRtVnlld1k2REhGMVlXeHBkSGxwUVRvUVkyOXNiM1Z5YzNCaFkyVkpJZ2x6Y21kaUJqb0dSVlE9IiwiZXhwIjpudWxsLCJwdXIiOiJ2YXJpYXRpb24ifX0=--1924d851274c06c8fa0acdfeffb43489fc4a7fcc/Robbie's%20Random%20AF%202.jpg" alt="">
+          </div>
+        </div>
+
+        <hr class="border-secondary my-5 w-75 mx-auto">
+
+        <div class="row featurette">
+          <div class="col-md-7 order-md-2 mb-auto mt-auto">
+            <h2 class="featurette-heading mb-3 fw-bold">Oh yeah, its that good. <span class="text-muted">See for yourself.</span></h2>
+            <p class="lead fs-6">Another featurette? Of course. More placeholder content here to give you an idea of how this layout would work with some actual real-world content in place.</p>
+          </div>
+          <div class="col-md-5 order-md-1">
+            <img class="img-fluid rounded shadow" width="100%" class="mb-4" src="https://media.tenor.com/24ZQ7hgjYjcAAAAe/anuc.png" alt="">
+          </div>
+        </div>
+
+        <!-- /END THE FEATURETTES -->
+
+      </div>
+    </section>
+
+</div>
+<footer class="mt-auto w-100">
+    <div class="bg-dark text-light text-center footer py-3 bottom-0 start-0 w-100">
+        <div class="d-flex justify-content-between align-items-center flex-wrap">
+            <p class="mb-0 ms-3">&copy; 2025 Nexus</p>
+            <button type="button" class="btn btn-dark me-3 my-2" data-bs-toggle="modal" data-bs-target="#contactModal">
+                Contact
+            </button>
+        </div>
+
+    </div>
+ <div class="modal fade" id="contactModal" tabindex="-1" aria-labelledby="contactModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="contactModalLabel">Send a Message</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form>
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Your Name</label>
+                            <input type="text" class="form-control" id="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Your Email</label>
+                            <input type="email" class="form-control" id="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="message" class="form-label">Message</label>
+                            <textarea class="form-control" id="message" rows="4" required></textarea>
+                        </div>
+                            <div>
+                            <label class="form-label mt-3">Reason for contact</label>
+                            <div class="d-flex gap-2 flex-column">
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleStudent">
+                                  cant log in
+                                </label>
+                              </div>
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleTeacher">
+                                  found our project interesting
+                                </label>
+                              </div>
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="checkbox" required>
+                                <label class="form-check-label" for="roleBusiness">
+                                  bug report
+                                </label>
+                              </div>
+                              
+                            </div>
+                        </div>
+
+                          <button type="submit" class="btn btn-outline-primary w-100 mt-3">Send</button>
+
+                        
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+<script src="/java/script.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.6.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+
+  </body>
+</html>
