@@ -296,6 +296,15 @@ function expandCameraToFit(newPoint) {
 }
 // Function to Reset the Scan
 function resetScan() {
+    const btn = document.getElementById('toggleBtn');
+    const targetRef = database.ref('toAltera');
+
+    targetRef.set(2).then(() => {
+            isScanning = false;
+            btn.innerText = "START SCAN";
+            btn.classList.replace('btn-danger', 'btn-primary'); // Change color back to blue
+        }).catch(err => console.error("Firebase Set Error:", err));
+        
     // 1. Reset Data
     allPoints = [];
     boundingBox.makeEmpty();
@@ -450,7 +459,7 @@ function toggleScan() {
         
     } else {
         // STOP: Send 2 to Firebase
-        targetRef.set(2).then(() => {
+        targetRef.set(1).then(() => {
             isScanning = false;
             btn.innerText = "START SCAN";
             btn.classList.replace('btn-danger', 'btn-primary'); // Change color back to blue
