@@ -243,25 +243,25 @@ let boundingBox = new THREE.Box3();
 let yaw = 0, pitch = 0, roll = 0;
 let lastTimestamp = Date.now();
 let allPoints = []; // To store points for exporting later
+// --- REPLACE YOUR CURRENT VARIABLES WITH THESE ---
+let maxTimestampProcessed = 0; // Tracks the absolute newest point we've seen
+const ALPHA = 0.96; 
+const GYRO_DEADZONE = 5.0; // Increased! (See section 2 below)
+let isFirstPoint = true;
 
 function createDot(x, y, z) {
-    // 1. SAFETY CHECK: If any coordinate is NaN or undefined, STOP.
     if (isNaN(x) || isNaN(y) || isNaN(z)) return;
 
-    // 2. DISTANCE THRESHOLD: Don't add dots if they are too close (3cm)
     if (allPoints.length > 0) {
         const last = allPoints[allPoints.length - 1];
         const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
-        if (d < 0.03) return; 
+        if (d < 0.03) return; // 3cm threshold
     }
 
-    // 3. COLOR LOGIC: Map Height (Y) to Color
     const pointColor = new THREE.Color();
-    // Adjust 'y / 2' based on your room height (0 = blue, 1 = red)
     const hue = Math.abs(y % 1); 
     pointColor.setHSL(hue, 1, 0.5);
 
-    // 4. CREATE MESH: New material for EVERY dot is required for color changes
     const geometry = new THREE.SphereGeometry(0.02, 8, 8);
     const material = new THREE.MeshBasicMaterial({ color: pointColor });
     const sphere = new THREE.Mesh(geometry, material);
@@ -269,31 +269,113 @@ function createDot(x, y, z) {
     sphere.position.set(x, y, z);
     scene.add(sphere);
 
-    // 5. UPDATE DATA & CAMERA
     const newVec = new THREE.Vector3(x, y, z);
     allPoints.push(newVec);
     
-    // Only adjust camera if the checkbox is checked
-    if (document.getElementById("autoFollow").checked) {
-        expandCameraToFit(newVec);
-    }
+    // NOTE: Removed the expandCameraToFit call from here to prevent massive lag.
+    // It will now be handled once per batch at the bottom of the Firebase listener.
 }
 
-function expandCameraToFit(newPoint) {
-    // 1. Expand the bounding box to include the new point
-    boundingBox.expandByPoint(newPoint);
 
-    // 2. Get the center point of the entire scan
-    const center = new THREE.Vector3();
-    boundingBox.getCenter(center);
+// ======================================================================
+// 4. READ LIDAR DATA FROM FIREBASE AND DRAW DOTS
+// ======================================================================
+let lastEspTimestamp = 0;
 
-    // 3. Update the OrbitControls target
-    // We check isNaN again just to be 100% safe from black screens
-    if (controls && !isNaN(center.x)) {
-        // .copy() is an instant jump, .lerp() is a smooth slide
-        controls.target.lerp(center, 0.1); 
+firebase.database().ref("/fromAltera").on("value", snapshot => {
+    const batchData = snapshot.val();
+    if (!batchData || !Array.isArray(batchData)) return;
+
+    let lastValidPoint = null;
+
+    batchData.forEach((dataPoint) => {
+        if (!dataPoint.g || !dataPoint.a || dataPoint.d === undefined || dataPoint.t === undefined) return;
+
+        if (dataPoint.t <= maxTimestampProcessed) return;
+
+        if (maxTimestampProcessed === 0) {
+            maxTimestampProcessed = dataPoint.t;
+            return; 
+        }
+        
+        const dt = (dataPoint.t - maxTimestampProcessed) / 1000.0;
+        maxTimestampProcessed = dataPoint.t; 
+
+        // Reject bad timestamps (dt > 0.2 means 200ms gap, which ruins integration)
+        if (dt <= 0 || dt > 0.2) return; 
+
+        // --- Step 1: Gyro Deadzone (Keep it low for smooth scans) ---
+        const GYRO_DEADZONE = 5.0; 
+        const gx = Math.abs(dataPoint.g.x) > GYRO_DEADZONE ? dataPoint.g.x : 0;
+        const gy = Math.abs(dataPoint.g.y) > GYRO_DEADZONE ? dataPoint.g.y : 0;
+        const gz = Math.abs(dataPoint.g.z) > GYRO_DEADZONE ? dataPoint.g.z : 0;
+
+        // --- Step 2: CUSTOM ACCELEROMETER REMAPPING ---
+        // Because X is your vertical axis (gravity), X acts as the base for our math.
+        
+        // Pitch: Tilting up/down. This rotates around your physical Y-axis.
+        // It changes the balance of gravity between the X (vertical) and Z (forward) axes.
+        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
+        
+        // Roll: Tilting side-to-side. This rotates around your physical Z-axis.
+        // It changes the balance of gravity between the X (vertical) and Y (lateral) axes.
+        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
+
+        if (isFirstPoint) {
+            pitch = accPitch;
+            roll = accRoll;
+            yaw = 0; // Always start facing "forward" in the 3D world
+            isFirstPoint = false;
+        } else {
+            // Gyro Remapping based on your physical layout:
+            // g.y rotates around Y -> Pitch (nodding up/down)
+            // g.z rotates around Z -> Roll (steering wheel tilt)
+            // g.x rotates around X -> Yaw (panning left/right, since X is vertical)
+            
+            pitch = ALPHA * (pitch + gy * dt) + (1 - ALPHA) * accPitch;
+            roll = ALPHA * (roll + gz * dt) + (1 - ALPHA) * accRoll;
+            yaw += gx * dt; 
+        }
+
+        // --- Step 3: 3D Mapping ---
+        const distCm = Number(dataPoint.d);
+        if (distCm <= 5 || distCm > 1200) return; 
+
+        const radius = distCm / 100.0; 
+        
+        // CRITICAL CHANGE: If LIDAR is opposite the down-facing pins, it points UP.
+        // In Three.js, Y is the UP axis. 
+        let point = new THREE.Vector3(0, radius, 0); 
+        
+        // Standard Three.js order (Y is Yaw, X is Pitch, Z is Roll)
+        const euler = new THREE.Euler(
+            pitch * (Math.PI / 180),
+            yaw * (Math.PI / 180),
+            roll * (Math.PI / 180),
+            'YXZ' 
+        );
+
+        point.applyEuler(euler);
+        createDot(point.x, point.y, point.z);
+        
+        lastValidPoint = point;
+    
+    });
+
+    // --- Step 4: Update UI elements ---
+    const lastData = batchData[batchData.length - 1];
+    document.getElementById("valA").innerText = Math.round(yaw) + "°";
+    document.getElementById("valB").innerText = Math.round(pitch) + "°";
+    document.getElementById("valC").innerText = Math.round(roll) + "°";
+    document.getElementById("valDist").innerText = lastData.d + "cm";
+
+    // --- Step 5: Update Camera efficiently ---
+    // NOTE: I replaced expandCameraToFit because it is missing from your code and will cause an error!
+    if (lastValidPoint && document.getElementById("autoFollow").checked) {
+        controls.target.lerp(lastValidPoint, 0.05); // Smoothly drags the camera center to the new points
     }
-}
+});
+
 // Function to Reset the Scan
 function resetScan() {
     
@@ -302,6 +384,7 @@ function resetScan() {
     allPoints = [];
     boundingBox.makeEmpty();
     yaw = 0; pitch = 0; roll = 0;
+    isFirstPoint = true; // <-- ADD THIS LINE
 
     // 2. Clear Scene (Looping backwards is the key)
     for (let i = scene.children.length - 1; i >= 0; i--) {
@@ -329,99 +412,6 @@ function resetScan() {
         }).catch(err => console.error("Firebase Set Error:", err));
         
     console.log("Scan Cleared and Camera Reset");
-}
-
-// ======================================================================
-// 4. READ LIDAR DATA FROM FIREBASE AND DRAW DOTS
-// ======================================================================
-
-
-// Filter constant: 0.98 trusts the Gyro for fast motion, 
-// 0.02 trusts Accelerometer for the gravity "truth".
-const ALPHA = 0.98; 
-
-// --- 2. Firebase Listener ---
-firebase.database().ref("/fromAltera").on("value", snapshot => {
-    const data = snapshot.val();
-    if (!data || !data.gyro || !data.accel || !data.lidar) return;
-
-    // Time calculation for integration
-    const now = Date.now();
-    const dt = (now - lastTimestamp) / 1000;
-    lastTimestamp = now;
-
-    // --- 3. Sensor Fusion (Complementary Filter) ---
-    
-    // Calculate Pitch and Roll from Accelerometer (Gravity Vector)
-    // Pitch: Tilt forward/backward
-    const accPitch = Math.atan2(data.accel.y, data.accel.z) * (180 / Math.PI);
-    // Roll: Tilt side-to-side
-    const accRoll = Math.atan2(-data.accel.x, Math.sqrt(data.accel.y**2 + data.accel.z**2)) * (180 / Math.PI);
-
-    // Apply Filter: NewAngle = (0.98 * (Current + GyroDelta)) + (0.02 * AccelTruth)
-    pitch = ALPHA * (pitch + data.gyro.x * dt) + (1 - ALPHA) * accPitch;
-    roll = ALPHA * (roll + data.gyro.z * dt) + (1 - ALPHA) * accRoll;
-    
-    // Yaw: Pure integration (requires a Magnetometer for "truth", which we don't have here)
-    yaw += data.gyro.y * dt;
-
-    // --- 4. 3D Coordinate Mapping ---
-    
-    const distCm = Number(data.lidar.dist);
-    // Ignore errors (-1) or out-of-range (>12m)
-    if (distCm <= 0 || distCm > 1200) return;
-
-    const radius = distCm / 100; // Convert to meters
-
-    // Step A: Create a vector pointing straight ahead (Z-axis)
-    // We use -radius because in Three.js, "forward" is usually negative Z
-    let point = new THREE.Vector3(0, 0, -radius);
-
-    // Step B: Create a Rotation Matrix (Euler) based on our IMU angles
-    // Order 'YXZ' is standard for "FPS camera" style movement
-    const euler = new THREE.Euler(
-        pitch * (Math.PI / 180),
-        yaw * (Math.PI / 180),
-        roll * (Math.PI / 180),
-        'YXZ'
-    );
-
-    // Step C: Apply the rotation to our distance vector
-    point.applyEuler(euler);
-
-    // --- 5. Rendering & UI ---
-    
-    // Add point to scene
-    createDot(point.x, point.y, point.z);
-    
-    // Update the Bootstrap UI numbers
-    document.getElementById("valA").innerText = Math.round(yaw) + "°";
-    document.getElementById("valB").innerText = Math.round(pitch) + "°";
-    document.getElementById("valC").innerText = Math.round(roll) + "°";
-    document.getElementById("valDist").innerText = distCm + "cm";
-    expandCameraToFit(point);
-    //centerCameraOnPoints(allPoints);
-});
-
-// Auto camera centering: averages all points
-function centerCameraOnPoints(points) {
-  const avg = { x: 0, y: 0, z: 0 };
-  let count = points.length;
-
-  points.forEach(p => {
-    avg.x += p.x;
-    avg.y += p.y;
-    avg.z += p.z;
-  });
-
-  // Compute average
-  avg.x /= count;
-  avg.y /= count;
-  avg.z /= count;
-
-  // Reposition camera
-  camera.position.set(avg.x + 5, avg.y + 5, avg.z + 5);
-  camera.lookAt(avg.x, avg.y, avg.z);
 }
 
 
