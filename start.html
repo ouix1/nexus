@@ -1,97 +1,58 @@
 <!DOCTYPE html>
-<!-- Defines this file as an HTML5 document -->
-
 <html lang="en">
-<!-- Sets the language to English -->
-
 <head>
   <meta charset="UTF-8">
-  <!-- Tells the browser to use UTF-8 encoding so characters display correctly -->
-
   <title>LIDAR 3D Viewer</title>
-  <!-- Title shown in the browser tab -->
-
   <style>
     body { margin: 0; overflow: hidden; }
     /* Removes default white margins and hides scrollbars,
        letting THREE.js use the entire screen */
   </style>
 
-  <!-- BOOTSTRAP ICONS (for icons in navbar) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
-  <!-- BOOTSTRAP CSS (page styling & layout) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-  <!-- These 3 lines incorrectly link to .html as CSS, but keeping because you want comments -->
-  <link rel="stylesheet" href="contact.html">  <!-- Not a CSS file but included as you wrote -->
-  <link rel="stylesheet" href="gallery.html">  <!-- Same here -->
-  <link rel="stylesheet" href="style.css"> <!-- Your main custom CSS -->
-  <link rel="stylesheet" href="start.html">      <!-- Not CSS but included anyway -->
+  <link rel="stylesheet" href="contact.html">  
+  <link rel="stylesheet" href="gallery.html">  
+  <link rel="stylesheet" href="style.css"> 
+  <link rel="stylesheet" href="start.html">      
 </head>
 
 <body>
-<!-- Everything visible on the webpage goes inside <body> -->
-
-<!-- =============================================================
-     NAVIGATION BAR (top menu)
-============================================================== -->
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-  <!-- Bootstrap dark-themed navbar that sticks to the top -->
-
   <div class="container-fluid">
-    <!-- Makes navbar content stretch nicely -->
-
     <a class="navbar-brand fw-bold" href="home.html">
       ne<span style="color: #0d6efd">x</span>us
     </a>
-    <!-- Website logo -->
-
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
       data-bs-target="#navbarSupportedContent">
-      <!-- Hamburger menu for mobile view -->
       <span class="navbar-toggler-icon"></span>
     </button>
 
     <div class="collapse navbar-collapse fw-bold" id="navbarSupportedContent">
-      <!-- Collapsible menu container -->
-
       <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <!-- Navigation links aligned to the right -->
-
         <li class="nav-item">
           <a class="nav-link" href="home.html">Home</a>
-          <!-- Link to home page -->
-        </li>
-
+          </li>
         <li class="nav-item">
           <a class="nav-link" href="gallery.html">gallery</a>
-          <!-- Link to gallery page -->
-        </li>
-
+          </li>
         <li class="nav-item">
           <a class="nav-link" href="Our_team.html">Our Team</a>
-          <!-- Link to "Our Team" page -->
-        </li>
-
+          </li>
         <li>
           <button type="button" class="nav-link btn btn-dark fw-bold"
             data-bs-toggle="modal" data-bs-target="#contactModal">
             Contact
           </button>
-          <!-- Opens contact modal -->
-        </li>
-
+          </li>
         <li class="nav-item" id="startdiv">
           <a class="nav-link active" href="start.html">Lidar_scanner</a>
-          <!-- Highlights current page -->
-        </li>
-
+          </li>
       </ul>
     </div>
   </div>
 </nav>
-
 
 <style>
     .scanner-panel {
@@ -116,15 +77,15 @@
 
 <div class="scanner-panel bg-dark p-4 rounded-4 shadow-lg border border-secondary text-white">
     
-    <h5 class="border-bottom border-secondary pb-2 mb-4 text-uppercase small tracking-widest text-center">IMU 3D Scanner</h5>
+    <h5 class="border-bottom border-secondary pb-2 mb-4 text-uppercase small tracking-widest text-center">MECHANICAL 3D SCANNER</h5>
     
     <div class="row text-center mb-4">
         <div class="col-4">
-            <div class="text-secondary small">YAW</div>
+            <div class="text-secondary small">PAN (YAW)</div>
             <div id="valA" class="h3 fw-bold text-info">0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary small">PITCH</div>
+            <div class="text-secondary small">TILT (PITCH)</div>
             <div id="valB" class="h3 fw-bold text-warning">0°</div>
         </div>
         <div class="col-4">
@@ -142,7 +103,7 @@
         START SCAN
     </button>
 
-    <button onclick="resetScan()" class="btn btn-md btn-outline-light w-100 mb-3">Reset Horizon</button>
+    <button onclick="resetScan()" class="btn btn-md btn-outline-light w-100 mb-3">Reset System</button>
 
     <div class="form-check form-switch d-flex justify-content-center align-items-center gap-2 mt-2">
         <input class="form-check-input" type="checkbox" id="autoFollow" checked style="width: 3em; height: 1.5em;">
@@ -152,15 +113,9 @@
 
 <style> .tiny { font-size: 0.6rem; } </style>
 
-<!-- =============================================================
-     THREE.JS LIBRARY (3D rendering)
-============================================================== -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<!-- =============================================================
-     FIREBASE LIBRARIES (Realtime DB + Auth compat version 8)
-============================================================== -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
@@ -169,7 +124,6 @@
 // 1. FIREBASE CONFIGURATION
 // ======================================================================
 
-// Your Firebase project settings — required to connect to your database
 const firebaseConfig = {
   apiKey: "AIzaSyDr5USKStzLZ6OQCfTBbZBmqihhbpBNmCY",
   authDomain: "dsc-dba80.firebaseapp.com",
@@ -181,88 +135,94 @@ const firebaseConfig = {
   databaseURL: "https://dsc-dba80-default-rtdb.firebaseio.com/"
 };
 
-// Start Firebase using the above config
 firebase.initializeApp(firebaseConfig);
 
-// Print Firebase object to the console to confirm it's running
-console.log("Firebase:", firebase);
-
+// ======================================================================
+// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
+// ======================================================================
+const STEPPER_TIME_PER_360_MS = 30000; 
+const SERVO_DROP_PER_ROTATION = 3.5;   
+const MOTOR_START_DELAY_MS = 500;      
 
 // ======================================================================
-// 2. THREE.JS — CREATE A 3D ENVIRONMENT
+// 3. THREE.JS — CREATE A 3D ENVIRONMENT
 // ======================================================================
 
-console.log("THREE:", THREE);
-
-// Create a 3D "world" where objects will exist
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202020);   // Dark grey background
+scene.background = new THREE.Color(0x202020); 
 
-// Create a perspective camera (like the human eye)
 const camera = new THREE.PerspectiveCamera(
-  75,                                          // field of view (degrees)
-  window.innerWidth / window.innerHeight,      // aspect ratio
-  0.1,                                         // near clipping distance
-  1000                                         // far clipping distance
+  75, window.innerWidth / window.innerHeight, 0.1, 1000                                         
 );
-
-// Move the camera back so we can see the 3D space
 camera.position.set(3, 3, 3);
 
-// Create the WebGL renderer (draws the 3D graphics)
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-
-// Add the 3D canvas to the page
 document.body.appendChild(renderer.domElement);
 
-// ==========================================
-// 3. INITIALIZE CONTROLS HERE (The Fix)
-// ==========================================
-controls = new THREE.OrbitControls(camera, renderer.domElement);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; 
 controls.dampingFactor = 0.05;
 
-// Create a grid floor for visual reference (10x10)
 const grid = new THREE.GridHelper(10, 10);
-// Move it DOWN 2 meters
 grid.position.y = -2;
 scene.add(grid);
 
-// Add a light so objects are visible
 const light = new THREE.PointLight(0xffffff, 1);
 light.position.set(5, 5, 5);
 scene.add(light);
 
+const BOUNDS = {
+    minX: -5.0, maxX: 5.0,  
+    minY: -2.0, maxY: 5.0,  
+    minZ: -5.0, maxZ: 5.0   
+};
+
+// --- Global State Variables (Mechanical 3D) ---
+let yaw = 0, pitch = 0, roll = 0;
+let allPoints = []; 
+let maxTimestampProcessed = 0; 
+let isScanning = false;
+
+// --- Global State Variables (MPU UI Display) ---
+let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
+let lastMpuTimestamp = 0;
+let isFirstMpuPoint = true;
+const ALPHA = 0.96;
+
+// Variables for mechanical calculation tracking
+let scanState = 'IDLE'; 
+let firstPointTimestamp = 0;
+let lastValidPoint = null;
+
+// Queuing system variables
+let pointQueue = [];
+let lastDrawTime = Date.now();
 
 // ======================================================================
-// 3. FUNCTION TO CREATE A POINT (DOT) IN 3D
+// 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
 // ======================================================================
-let boundingBox = new THREE.Box3();
-// --- 1. Global State Variables ---
-let yaw = 0, pitch = 0, roll = 0;
-let lastTimestamp = Date.now();
-let allPoints = []; // To store points for exporting later
-// --- REPLACE YOUR CURRENT VARIABLES WITH THESE ---
-let maxTimestampProcessed = 0; // Tracks the absolute newest point we've seen
-const ALPHA = 0.96; 
-const GYRO_DEADZONE = 5.0; // Increased! (See section 2 below)
-let isFirstPoint = true;
 
 function createDot(x, y, z) {
     if (isNaN(x) || isNaN(y) || isNaN(z)) return;
 
+    if (x < BOUNDS.minX || x > BOUNDS.maxX || y < BOUNDS.minY || y > BOUNDS.maxY || z < BOUNDS.minZ || z > BOUNDS.maxZ) {
+        return; 
+    }
+
+    // 0.5cm (0.005) minimum distance check between points
     if (allPoints.length > 0) {
         const last = allPoints[allPoints.length - 1];
         const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
-        if (d < 0.03) return; // 3cm threshold
+        if (d < 0.005) return; 
     }
 
     const pointColor = new THREE.Color();
     const hue = Math.abs(y % 1); 
     pointColor.setHSL(hue, 1, 0.5);
 
-    const geometry = new THREE.SphereGeometry(0.02, 8, 8);
+    // 1mm radius (2mm diameter) for cleaner looking points
+    const geometry = new THREE.SphereGeometry(0.007, 8, 8);
     const material = new THREE.MeshBasicMaterial({ color: pointColor });
     const sphere = new THREE.Mesh(geometry, material);
     
@@ -271,125 +231,159 @@ function createDot(x, y, z) {
 
     const newVec = new THREE.Vector3(x, y, z);
     allPoints.push(newVec);
-    
-    // NOTE: Removed the expandCameraToFit call from here to prevent massive lag.
-    // It will now be handled once per batch at the bottom of the Firebase listener.
 }
 
-
 // ======================================================================
-// 4. READ LIDAR DATA FROM FIREBASE AND DRAW DOTS
+// 5. READ LIDAR DATA FROM FIREBASE AND QUEUE IT
 // ======================================================================
-let lastEspTimestamp = 0;
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
     const batchData = snapshot.val();
     if (!batchData || !Array.isArray(batchData)) return;
 
-    let lastValidPoint = null;
+    let currentBatchMax = maxTimestampProcessed;
+
+    // Detect if the ESP/Hardware restarted (timestamps suddenly reset to 0)
+    if (batchData.length > 0 && batchData[0].t !== undefined) {
+        if (batchData[0].t < maxTimestampProcessed - 5000) {
+            maxTimestampProcessed = 0;
+            currentBatchMax = 0;
+            firstPointTimestamp = batchData[0].t; 
+        }
+    }
 
     batchData.forEach((dataPoint) => {
-        if (!dataPoint.g || !dataPoint.a || dataPoint.d === undefined || dataPoint.t === undefined) return;
+        if (dataPoint.d === undefined || dataPoint.t === undefined) return;
 
-        if (dataPoint.t <= maxTimestampProcessed) return;
-
-        if (maxTimestampProcessed === 0) {
-            maxTimestampProcessed = dataPoint.t;
-            return; 
-        }
-        
-        const dt = (dataPoint.t - maxTimestampProcessed) / 1000.0;
-        maxTimestampProcessed = dataPoint.t; 
-
-        // Reject bad timestamps (dt > 0.2 means 200ms gap, which ruins integration)
-        if (dt <= 0 || dt > 0.2) return; 
-
-        // --- Step 1: Gyro Deadzone (Keep it low for smooth scans) ---
-        const GYRO_DEADZONE = 5.0; 
-        const gx = Math.abs(dataPoint.g.x) > GYRO_DEADZONE ? dataPoint.g.x : 0;
-        const gy = Math.abs(dataPoint.g.y) > GYRO_DEADZONE ? dataPoint.g.y : 0;
-        const gz = Math.abs(dataPoint.g.z) > GYRO_DEADZONE ? dataPoint.g.z : 0;
-
-        // --- Step 2: CUSTOM ACCELEROMETER REMAPPING ---
-        // Because X is your vertical axis (gravity), X acts as the base for our math.
-        
-        // Pitch: Tilting up/down. This rotates around your physical Y-axis.
-        // It changes the balance of gravity between the X (vertical) and Z (forward) axes.
-        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
-        
-        // Roll: Tilting side-to-side. This rotates around your physical Z-axis.
-        // It changes the balance of gravity between the X (vertical) and Y (lateral) axes.
-        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
-
-        if (isFirstPoint) {
-            pitch = accPitch;
-            roll = accRoll;
-            yaw = 0; // Always start facing "forward" in the 3D world
-            isFirstPoint = false;
-        } else {
-            // Gyro Remapping based on your physical layout:
-            // g.y rotates around Y -> Pitch (nodding up/down)
-            // g.z rotates around Z -> Roll (steering wheel tilt)
-            // g.x rotates around X -> Yaw (panning left/right, since X is vertical)
+        // Queue newly seen points
+        if (dataPoint.t > maxTimestampProcessed) {
+            pointQueue.push(dataPoint);
             
-            pitch = ALPHA * (pitch + gy * dt) + (1 - ALPHA) * accPitch;
-            roll = ALPHA * (roll + gz * dt) + (1 - ALPHA) * accRoll;
-            yaw += gx * dt; 
+            if (dataPoint.t > currentBatchMax) {
+                currentBatchMax = dataPoint.t;
+            }
         }
-
-        // --- Step 3: 3D Mapping ---
-        const distCm = Number(dataPoint.d);
-        if (distCm <= 5 || distCm > 1200) return; 
-
-        const radius = distCm / 100.0; 
-        
-        // CRITICAL CHANGE: If LIDAR is opposite the down-facing pins, it points UP.
-        // In Three.js, Y is the UP axis. 
-        let point = new THREE.Vector3(0, radius, 0); 
-        
-        // Standard Three.js order (Y is Yaw, X is Pitch, Z is Roll)
-        const euler = new THREE.Euler(
-            pitch * (Math.PI / 180),
-            yaw * (Math.PI / 180),
-            roll * (Math.PI / 180),
-            'YXZ' 
-        );
-
-        point.applyEuler(euler);
-        createDot(point.x, point.y, point.z);
-        
-        lastValidPoint = point;
-    
     });
 
-    // --- Step 4: Update UI elements ---
-    const lastData = batchData[batchData.length - 1];
-    document.getElementById("valA").innerText = Math.round(yaw) + "°";
-    document.getElementById("valB").innerText = Math.round(pitch) + "°";
-    document.getElementById("valC").innerText = Math.round(roll) + "°";
-    document.getElementById("valDist").innerText = lastData.d + "cm";
-
-    // --- Step 5: Update Camera efficiently ---
-    // NOTE: I replaced expandCameraToFit because it is missing from your code and will cause an error!
-    if (lastValidPoint && document.getElementById("autoFollow").checked) {
-        controls.target.lerp(lastValidPoint, 0.05); // Smoothly drags the camera center to the new points
-    }
+    maxTimestampProcessed = currentBatchMax;
 });
 
-// Function to Reset the Scan
+// ======================================================================
+// 6. PROCESS A SINGLE POINT (MECHANICAL LOGIC + MPU UI LOGIC)
+// ======================================================================
+
+function processPoint(dataPoint) {
+    if (scanState === 'IDLE') return;
+
+    if (scanState === 'WAITING_FIRST_POINT') {
+        firstPointTimestamp = dataPoint.t;
+        scanState = 'SCANNING';
+    }
+
+    // --- PART A: MPU6050 LOGIC (FOR UI ONLY) ---
+    if (dataPoint.g && dataPoint.a) {
+        let dt = 0.02; // Default for first reading
+        if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
+            dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
+            if (dt <= 0 || dt > 1.0) dt = 0.02; 
+        }
+        lastMpuTimestamp = dataPoint.t;
+
+        const gy = dataPoint.g.y; 
+        const gx = dataPoint.g.x; 
+        const gz = dataPoint.g.z; 
+
+        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
+        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
+
+        if (isFirstMpuPoint) {
+            mpuPitch = accPitch;
+            mpuRoll = accRoll; 
+            mpuYaw = 0;
+            isFirstMpuPoint = false;
+        } else {
+            mpuPitch = ALPHA * (mpuPitch + gy * dt) + (1 - ALPHA) * accPitch;
+            mpuRoll = ALPHA * (mpuRoll + gz * dt) + (1 - ALPHA) * accRoll;
+            mpuYaw += gx * dt; 
+        }
+    }
+
+    // --- PART B: PING-PONG MECHANICAL LOGIC (FOR 3D DOTS ONLY) ---
+    let elapsed_ms = dataPoint.t - firstPointTimestamp;
+    let moving_time_ms = elapsed_ms - MOTOR_START_DELAY_MS;
+
+    let currentYaw = 0;
+    let currentPitch = 0;
+
+    if (moving_time_ms > 0) {
+        let sweeps = Math.floor(moving_time_ms / STEPPER_TIME_PER_360_MS);
+        let progress = (moving_time_ms % STEPPER_TIME_PER_360_MS) / STEPPER_TIME_PER_360_MS;
+
+        // Even sweeps go forward, Odd sweeps go backward
+        if (sweeps % 2 === 0) {
+            currentYaw = progress * 360; 
+        } else {
+            currentYaw = 360 - (progress * 360); 
+        }
+
+        currentPitch = sweeps * SERVO_DROP_PER_ROTATION; 
+    }
+
+    yaw = currentYaw;
+    pitch = currentPitch;
+    roll = 0;
+
+    const distCm = Number(dataPoint.d);
+    if (distCm > 5 && distCm <= 1200) { 
+        const radius = distCm / 100.0; 
+        
+        let point = new THREE.Vector3(0, radius, 0); 
+        
+        const xAxis = new THREE.Vector3(1, 0, 0);
+        point.applyAxisAngle(xAxis, pitch * (Math.PI / 180));
+
+        const yAxis = new THREE.Vector3(0, 1, 0);
+        point.applyAxisAngle(yAxis, yaw * (Math.PI / 180));
+
+        createDot(point.x, point.y, point.z);
+        lastValidPoint = point;
+    }
+
+    // --- PART C: UPDATE UI WITH CONSTRAINED ANGLES ---
+    let displayYaw = ((mpuYaw % 360) + 360) % 360; 
+    let displayPitch = ((mpuPitch % 360) + 360) % 360;
+    if (displayPitch > 180) displayPitch -= 360; 
+
+    document.getElementById("valA").innerText = Math.round(displayYaw) + "°";
+    document.getElementById("valB").innerText = Math.round(displayPitch) + "°";
+    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
+    document.getElementById("valDist").innerText = distCm + "cm";
+
+    if (lastValidPoint && document.getElementById("autoFollow").checked) {
+        controls.target.lerp(lastValidPoint, 0.05);
+    }
+}
+
+// ======================================================================
+// 7. CONTROLS & RESET FUNCTIONS
+// ======================================================================
+
 function resetScan() {
-    
-
-    // 1. Reset Data
     allPoints = [];
-    boundingBox.makeEmpty();
     yaw = 0; pitch = 0; roll = 0;
-    isFirstPoint = true; // <-- ADD THIS LINE
+    
+    scanState = 'IDLE';
+    firstPointTimestamp = 0;
+    maxTimestampProcessed = 0;
+    pointQueue = []; 
+    lastValidPoint = null;
 
-    // 2. Clear Scene (Looping backwards is the key)
+    mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
+    lastMpuTimestamp = 0;
+    isFirstMpuPoint = true;
+
     for (let i = scene.children.length - 1; i >= 0; i--) {
         const obj = scene.children[i];
-        // Don't delete the grid or the camera!
         if (obj.type === "Mesh" && obj !== grid) {
             scene.remove(obj);
             if(obj.geometry) obj.geometry.dispose();
@@ -397,84 +391,91 @@ function resetScan() {
         }
     }
 
-    // 3. Reset Camera Position to a safe distance
     camera.position.set(0, 2, 5);
     controls.target.set(0, 0, 0);
     controls.update();
     
-    const btn = document.getElementById('toggleBtn');
-    const targetRef = database.ref('toAltera');
+    document.getElementById("valA").innerText = "0°";
+    document.getElementById("valB").innerText = "0°";
+    document.getElementById("valC").innerText = "0°"; 
+    document.getElementById("valDist").innerText = "0cm";
 
-    targetRef.set(1).then(() => {
-            isScanning = false;
-            btn.innerText = "START SCAN";
-            btn.classList.replace('btn-danger', 'btn-primary'); // Change color back to blue
-        }).catch(err => console.error("Firebase Set Error:", err));
-        
-    console.log("Scan Cleared and Camera Reset");
+    const dbRef = firebase.database().ref('toAltera');
+    dbRef.set(1).catch(err => console.error("Firebase Set Error:", err));
 }
 
+window.onload = function() {
+    const dbRef = firebase.database().ref('toAltera');
+    const btn = document.getElementById('toggleBtn');
+
+    dbRef.on('value', (snapshot) => {
+        const val = snapshot.val();
+        if (val === 0) {
+            isScanning = true;
+            scanState = 'WAITING_FIRST_POINT'; 
+            btn.innerText = "STOP SCAN";
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-danger');
+        } else {
+            isScanning = false;
+            scanState = 'IDLE'; 
+            btn.innerText = "START SCAN";
+            btn.classList.remove('btn-danger');
+            btn.classList.add('btn-primary');
+        }
+    });
+};
+
+function toggleScan() {
+    const dbRef = firebase.database().ref('toAltera');
+    if (!isScanning) {
+        dbRef.set(0); 
+    } else {
+        dbRef.set(2); 
+    }
+}
 
 // ======================================================================
-// 5. ANIMATION LOOP — REDRAWS THE SCENE 60FPS
+// 8. ANIMATION & ELASTIC QUEUE PROCESSING LOOP
 // ======================================================================
 
-// Runs continuously to update the graphics
 function animate() {
     requestAnimationFrame(animate);
 
-    // This makes the 'lerp' and 'target' changes actually happen on screen
+    let now = Date.now();
+    let timeElapsed = now - lastDrawTime;
+
+    // Elastic Rubber Band Logic
+    if (pointQueue.length > 0) {
+        let dynamicDrawInterval = 166; // Standard pace (~30 points in 5 seconds)
+
+        // If the queue is huge, drop interval to catch up instantly
+        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
+        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
+        // If the queue is healthy, proceed normally
+        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
+        // If the queue is running out (batch is late), slow down to stretch out the animation
+        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
+        else dynamicDrawInterval = 400; // Almost empty, stretch it as long as possible
+
+        // Draw points based on the dynamic interval
+        while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
+            let nextDataPoint = pointQueue.shift();
+            processPoint(nextDataPoint);
+            timeElapsed -= dynamicDrawInterval;
+            lastDrawTime = now - timeElapsed; // Carries over remainder milliseconds flawlessly
+        }
+    }
+
     if (controls) {
         controls.update(); 
     }
 
     renderer.render(scene, camera);
 }
-// Make sure this is called once to start the loop
+
 animate();
 
-// Global scope variables
-let isScanning = false;
-
-window.onload = function() {
-    // 1. Initialize Reference
-    const dbRef = firebase.database().ref('toAltera');
-    const btn = document.getElementById('toggleBtn');
-
-    // 2. THE LISTENER: This is the part that updates WITHOUT refreshing
-    // We use .on('value', ...) which keeps a persistent connection open
-    dbRef.on('value', (snapshot) => {
-        const val = snapshot.val();
-        console.log("Database changed to:", val); // Check your browser console
-
-        if (val === 0) {
-            isScanning = true;
-            btn.innerText = "STOP SCAN";
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-danger');
-        } else {
-            isScanning = false;
-            btn.innerText = "START SCAN";
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-primary');
-        }
-    }, (error) => {
-        console.error("The read failed: ", error.code);
-    });
-};
-
-// 3. THE ACTION: This only sends data; the listener above handles the UI
-function toggleScan() {
-    const dbRef = firebase.database().ref('toAltera');
-    
-    if (!isScanning) {
-        // Send 0 to Start
-        dbRef.set(0);
-    } else {
-        // Send 2 to Stop
-        dbRef.set(2);
-    }
-}
 </script>
 
 </body>
