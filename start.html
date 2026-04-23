@@ -135,17 +135,15 @@ firebase.initializeApp(firebaseConfig);
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
 const STEPPER_TIME_PER_360_MS = 30000; 
-
-// THE BUBBLE FIX: VHDL uses a 1ms-2ms PWM window. This creates a 90-degree 
-// physical sweep on standard servos. Thus, 6 VHDL degrees = 3.0 physical degrees.
 const SERVO_DROP_PER_ROTATION = 3.0;   
-
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
-// PHYSICAL MOUNTING OFFSETS (Fixes the inner spiraling parallax effect)
-const YAW_RADIUS_OFFSET_M = 0.03; // Lidar is 3cm outwards from the center of rotation
-const YAW_HEIGHT_OFFSET_M = 0.02; // Lidar is 2cm above the stepper motor center
+const YAW_RADIUS_OFFSET_M = 0.03; 
+const YAW_HEIGHT_OFFSET_M = 0.02; 
+
+// NEW SETTING: Adjust if the scan starts slightly off-center
+const PITCH_OFFSET_DEGREES = 5.0;
 
 // ======================================================================
 // 3. THREE.JS — CREATE A 3D ENVIRONMENT
@@ -175,12 +173,10 @@ const light = new THREE.PointLight(0xffffff, 1);
 light.position.set(5, 5, 5);
 scene.add(light);
 
-// --- ADD: SCANNER ORIGIN MARKER ---
-// A large, highly visible red sphere exactly at (0,0,0) to show the base
-const originGeometry = new THREE.SphereGeometry(0.05, 16, 16); // 10cm diameter
-const originMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Solid Red
+const originGeometry = new THREE.SphereGeometry(0.05, 16, 16); 
+const originMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
 const originMarker = new THREE.Mesh(originGeometry, originMaterial);
-originMarker.name = "originMarker"; // Named so the reset function ignores it
+originMarker.name = "originMarker"; 
 originMarker.position.set(0, 0, 0);
 scene.add(originMarker);
 
@@ -190,13 +186,12 @@ const BOUNDS = {
     minZ: -5.0, maxZ: 5.0   
 };
 
-// --- Global State Variables (Mechanical 3D) ---
+// --- Global State Variables ---
 let yaw = 0, pitch = 0, roll = 0;
 let allPoints = []; 
 let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-// --- Global State Variables (MPU UI Display) ---
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
 let lastMpuTimestamp = 0;
 let isFirstMpuPoint = true;
@@ -286,7 +281,6 @@ function processPoint(dataPoint) {
         scanState = 'SCANNING';
     }
 
-    // --- PART A: MPU6050 LOGIC (FOR UI ONLY) ---
     if (dataPoint.g && dataPoint.a) {
         let dt = 0.02; 
         if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
@@ -314,7 +308,6 @@ function processPoint(dataPoint) {
         }
     }
 
-    // --- PART B: PERFECT SYNC MECHANICAL LOGIC ---
     let elapsed_ms = dataPoint.t - firstPointTimestamp;
     let moving_time_ms = elapsed_ms - MOTOR_START_DELAY_MS;
 
@@ -340,7 +333,7 @@ function processPoint(dataPoint) {
             currentYaw = 360 - (progress * 360); 
         }
 
-        currentPitch = sweeps * SERVO_DROP_PER_ROTATION; 
+        currentPitch = (sweeps * SERVO_DROP_PER_ROTATION) + PITCH_OFFSET_DEGREES; 
     }
 
     yaw = currentYaw;
@@ -351,18 +344,14 @@ function processPoint(dataPoint) {
     if (distCm > 5 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         
-        // 1. RAW LASER: Pointing straight up initially
         let point = new THREE.Vector3(0, radiusM, 0); 
         
-        // 2. TILT (SERVO): Pivot the laser around the X-axis
         const xAxis = new THREE.Vector3(1, 0, 0);
         point.applyAxisAngle(xAxis, pitch * (Math.PI / 180));
 
-        // 3. PHYSICAL OFFSETS: Move the tilted assembly outward and upward 
-        point.y += YAW_HEIGHT_OFFSET_M; // Elevate 2cm above the stepper
-        point.z += YAW_RADIUS_OFFSET_M; // Push outward 3cm from the center of rotation
+        point.y += YAW_HEIGHT_OFFSET_M; 
+        point.z += YAW_RADIUS_OFFSET_M; 
 
-        // 4. PAN (STEPPER): Spin the entire offset assembly around the Y-axis
         const yAxis = new THREE.Vector3(0, 1, 0);
         point.applyAxisAngle(yAxis, yaw * (Math.PI / 180));
 
@@ -370,7 +359,6 @@ function processPoint(dataPoint) {
         lastValidPoint = point;
     }
 
-    // --- PART C: UPDATE UI WITH CONSTRAINED ANGLES ---
     let displayYaw = ((mpuYaw % 360) + 360) % 360; 
     let displayPitch = ((mpuPitch % 360) + 360) % 360;
     if (displayPitch > 180) displayPitch -= 360; 
