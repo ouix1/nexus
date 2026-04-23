@@ -132,14 +132,18 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // ======================================================================
-// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES (SYNCED TO VHDL)
+// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
 const STEPPER_TIME_PER_360_MS = 30000; 
-const SERVO_DROP_PER_ROTATION = 6.0;   
+
+// THE BUBBLE FIX: VHDL uses a 1ms-2ms PWM window. This creates a 90-degree 
+// physical sweep on standard servos. Thus, 6 VHDL degrees = 3.0 physical degrees.
+const SERVO_DROP_PER_ROTATION = 3.0;   
+
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
-// PHYSICAL MOUNTING OFFSETS (To fix the bubble parallax effect)
+// PHYSICAL MOUNTING OFFSETS (Fixes the inner spiraling parallax effect)
 const YAW_RADIUS_OFFSET_M = 0.03; // Lidar is 3cm outwards from the center of rotation
 const YAW_HEIGHT_OFFSET_M = 0.02; // Lidar is 2cm above the stepper motor center
 
@@ -355,7 +359,6 @@ function processPoint(dataPoint) {
         point.applyAxisAngle(xAxis, pitch * (Math.PI / 180));
 
         // 3. PHYSICAL OFFSETS: Move the tilted assembly outward and upward 
-        // This stops the spherical "bubble" by offsetting the pivot point.
         point.y += YAW_HEIGHT_OFFSET_M; // Elevate 2cm above the stepper
         point.z += YAW_RADIUS_OFFSET_M; // Push outward 3cm from the center of rotation
 
@@ -402,7 +405,6 @@ function resetScan() {
 
     for (let i = scene.children.length - 1; i >= 0; i--) {
         const obj = scene.children[i];
-        // Updated condition to protect the red originMarker from being deleted
         if (obj.type === "Mesh" && obj !== grid && obj.name !== "originMarker") {
             scene.remove(obj);
             if(obj.geometry) obj.geometry.dispose();
