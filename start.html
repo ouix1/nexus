@@ -78,15 +78,15 @@
     <div class="row text-center mb-4">
         <div class="col-4">
             <div class="text-secondary small">PAN (YAW)</div>
-            <div id="valA" class="h3 fw-bold text-info">0°</div>
+            <div id="valA" class="h3 fw-bold text-info">0.0°</div>
         </div>
         <div class="col-4">
             <div class="text-secondary small">TILT (PITCH)</div>
-            <div id="valB" class="h3 fw-bold text-warning">0°</div>
+            <div id="valB" class="h3 fw-bold text-warning">0.0°</div>
         </div>
         <div class="col-4">
             <div class="text-secondary small">ROLL</div>
-            <div id="valC" class="h3 fw-bold text-danger">0°</div>
+            <div id="valC" class="h3 fw-bold text-danger">0.0°</div>
         </div>
     </div>
 
@@ -141,8 +141,6 @@ const SWEEP_PAUSE_MS = 300;
 
 const YAW_RADIUS_OFFSET_M = 0.03; 
 const YAW_HEIGHT_OFFSET_M = 0.02; 
-
-// NEW SETTING: Adjust if the scan starts slightly off-center
 const PITCH_OFFSET_DEGREES = 5.0;
 
 // ======================================================================
@@ -187,22 +185,18 @@ const BOUNDS = {
 };
 
 // --- Global State Variables ---
-let yaw = 0, pitch = 0, roll = 0;
 let allPoints = []; 
 let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
-let lastMpuTimestamp = 0;
-let isFirstMpuPoint = true;
-const ALPHA = 0.96;
-
-let scanState = 'IDLE'; 
-let firstPointTimestamp = 0;
-let lastValidPoint = null;
+// Time Tracking logic to fix the "Blue Blob" and instant-start UI
+let scanStartLocalTime = 0;
+let firstPointTimestamp = null;
+let ignoreOldData = false; 
 
 let pointQueue = [];
 let lastDrawTime = Date.now();
+let lastValidPoint = null;
 
 // ======================================================================
 // 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
@@ -246,12 +240,27 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let currentBatchMax = maxTimestampProcessed;
 
+    // Detect hardware reset
     if (batchData.length > 0 && batchData[0].t !== undefined) {
         if (batchData[0].t < maxTimestampProcessed - 5000) {
             maxTimestampProcessed = 0;
             currentBatchMax = 0;
-            firstPointTimestamp = batchData[0].t; 
+            if (isScanning) {
+                scanStartLocalTime = Date.now();
+                firstPointTimestamp = null;
+                ignoreOldData = true;
+            }
         }
+    }
+
+    // NEW: "Blue Blob" Fix. Dump all old data sitting in Firebase from a previous scan
+    if (ignoreOldData) {
+        batchData.forEach(p => {
+            if (p.t > currentBatchMax) currentBatchMax = p.t;
+        });
+        maxTimestampProcessed = currentBatchMax;
+        ignoreOldData = false;
+        return; // Exit early so no stale data goes into the queue
     }
 
     batchData.forEach((dataPoint) => {
@@ -270,54 +279,28 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 });
 
 // ======================================================================
-// 6. PROCESS A SINGLE POINT (MECHANICAL LOGIC + MPU UI LOGIC)
+// 6. PROCESS A SINGLE POINT (PERFECT SYNC MAPPING)
 // ======================================================================
 
 function processPoint(dataPoint) {
-    if (scanState === 'IDLE') return;
+    if (!isScanning) return;
 
-    if (scanState === 'WAITING_FIRST_POINT') {
-        firstPointTimestamp = dataPoint.t;
-        scanState = 'SCANNING';
+    // Synchronize Hardware clock with Software clock on the very first fresh point
+    if (firstPointTimestamp === null) {
+        let local_elapsed = Date.now() - scanStartLocalTime;
+        // Anchor the hardware timestamp backwards so it perfectly matches our local start time
+        firstPointTimestamp = dataPoint.t - local_elapsed; 
     }
 
-    if (dataPoint.g && dataPoint.a) {
-        let dt = 0.02; 
-        if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
-            dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
-            if (dt <= 0 || dt > 1.0) dt = 0.02; 
-        }
-        lastMpuTimestamp = dataPoint.t;
-
-        const gy = dataPoint.g.y; 
-        const gx = dataPoint.g.x; 
-        const gz = dataPoint.g.z; 
-
-        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
-        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
-
-        if (isFirstMpuPoint) {
-            mpuPitch = accPitch;
-            mpuRoll = accRoll; 
-            mpuYaw = 0;
-            isFirstMpuPoint = false;
-        } else {
-            mpuPitch = ALPHA * (mpuPitch + gy * dt) + (1 - ALPHA) * accPitch;
-            mpuRoll = ALPHA * (mpuRoll + gz * dt) + (1 - ALPHA) * accRoll;
-            mpuYaw += gx * dt; 
-        }
-    }
-
-    let elapsed_ms = dataPoint.t - firstPointTimestamp;
-    let moving_time_ms = elapsed_ms - MOTOR_START_DELAY_MS;
+    let elapsed_ms = dataPoint.t - firstPointTimestamp - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
     let currentPitch = 0;
 
-    if (moving_time_ms > 0) {
+    if (elapsed_ms > 0) {
         const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
-        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
-        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
+        let sweeps = Math.floor(elapsed_ms / FULL_CYCLE_MS);
+        let time_in_sweep = elapsed_ms % FULL_CYCLE_MS;
 
         let progress = 0;
         
@@ -336,37 +319,27 @@ function processPoint(dataPoint) {
         currentPitch = (sweeps * SERVO_DROP_PER_ROTATION) + PITCH_OFFSET_DEGREES; 
     }
 
-    yaw = currentYaw;
-    pitch = currentPitch;
-    roll = 0;
-
     const distCm = Number(dataPoint.d);
+    
+    // Update ONLY the Lidar Distance UI here (Angles are updated smoothly in the animate loop)
+    document.getElementById("valDist").innerText = distCm + "cm";
+
     if (distCm > 5 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
-        
         let point = new THREE.Vector3(0, radiusM, 0); 
         
         const xAxis = new THREE.Vector3(1, 0, 0);
-        point.applyAxisAngle(xAxis, pitch * (Math.PI / 180));
+        point.applyAxisAngle(xAxis, currentPitch * (Math.PI / 180));
 
         point.y += YAW_HEIGHT_OFFSET_M; 
         point.z += YAW_RADIUS_OFFSET_M; 
 
         const yAxis = new THREE.Vector3(0, 1, 0);
-        point.applyAxisAngle(yAxis, yaw * (Math.PI / 180));
+        point.applyAxisAngle(yAxis, currentYaw * (Math.PI / 180));
 
         createDot(point.x, point.y, point.z);
         lastValidPoint = point;
     }
-
-    let displayYaw = ((mpuYaw % 360) + 360) % 360; 
-    let displayPitch = ((mpuPitch % 360) + 360) % 360;
-    if (displayPitch > 180) displayPitch -= 360; 
-
-    document.getElementById("valA").innerText = Math.round(displayYaw) + "°";
-    document.getElementById("valB").innerText = Math.round(displayPitch) + "°";
-    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
-    document.getElementById("valDist").innerText = distCm + "cm";
 
     if (lastValidPoint && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidPoint, 0.05);
@@ -379,17 +352,11 @@ function processPoint(dataPoint) {
 
 function resetScan() {
     allPoints = [];
-    yaw = 0; pitch = 0; roll = 0;
-    
-    scanState = 'IDLE';
-    firstPointTimestamp = 0;
-    maxTimestampProcessed = 0;
+    firstPointTimestamp = null;
+    scanStartLocalTime = 0;
     pointQueue = []; 
     lastValidPoint = null;
-
-    mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
-    lastMpuTimestamp = 0;
-    isFirstMpuPoint = true;
+    ignoreOldData = false;
 
     for (let i = scene.children.length - 1; i >= 0; i--) {
         const obj = scene.children[i];
@@ -404,9 +371,8 @@ function resetScan() {
     controls.target.set(0, 0, 0);
     controls.update();
     
-    document.getElementById("valA").innerText = "0°";
-    document.getElementById("valB").innerText = "0°";
-    document.getElementById("valC").innerText = "0°"; 
+    document.getElementById("valA").innerText = "0.0°";
+    document.getElementById("valB").innerText = "0.0°";
     document.getElementById("valDist").innerText = "0cm";
 
     const dbRef = firebase.database().ref('toAltera');
@@ -420,14 +386,18 @@ window.onload = function() {
     dbRef.on('value', (snapshot) => {
         const val = snapshot.val();
         if (val === 0) {
-            isScanning = true;
-            scanState = 'WAITING_FIRST_POINT'; 
+            if (!isScanning) {
+                isScanning = true;
+                scanStartLocalTime = Date.now(); // Start the UI spin immediately
+                ignoreOldData = true; // Drop stale Firebase data to prevent the blue blob
+                pointQueue = []; 
+                firstPointTimestamp = null;
+            }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
             btn.classList.add('btn-danger');
         } else {
             isScanning = false;
-            scanState = 'IDLE'; 
             btn.innerText = "START SCAN";
             btn.classList.remove('btn-danger');
             btn.classList.add('btn-primary');
@@ -454,6 +424,33 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
+    // --- INSTANT SMOOTH UI UPDATES ---
+    // The UI now spins perfectly based on time, exactly mirroring the real scanner
+    if (isScanning && scanStartLocalTime > 0) {
+        let ui_elapsed = Date.now() - scanStartLocalTime - MOTOR_START_DELAY_MS;
+        let uiYaw = 0;
+        let uiPitch = 0;
+
+        if (ui_elapsed > 0) {
+            const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+            let sweeps = Math.floor(ui_elapsed / FULL_CYCLE_MS);
+            let time_in_sweep = ui_elapsed % FULL_CYCLE_MS;
+            
+            let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+            
+            if (sweeps % 2 === 0) {
+                uiYaw = progress * 360; 
+            } else {
+                uiYaw = 360 - (progress * 360); 
+            }
+            uiPitch = (sweeps * SERVO_DROP_PER_ROTATION) + PITCH_OFFSET_DEGREES; 
+        }
+
+        document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
+        document.getElementById("valB").innerText = uiPitch.toFixed(1) + "°";
+    }
+
+    // --- QUEUE PROCESSOR ---
     if (pointQueue.length > 0) {
         let dynamicDrawInterval = 166; 
 
