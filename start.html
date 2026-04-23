@@ -5,8 +5,6 @@
   <title>LIDAR 3D Viewer</title>
   <style>
     body { margin: 0; overflow: hidden; }
-    /* Removes default white margins and hides scrollbars,
-       letting THREE.js use the entire screen */
   </style>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
@@ -61,12 +59,10 @@
         z-index: 100;
         width: 95%;
         max-width: 350px;
-        /* Mobile Default: Centered */
         left: 50%;
         transform: translateX(-50%);
     }
 
-    /* Desktop/Tablet: Move to left corner */
     @media (min-width: 768px) {
         .scanner-panel {
             left: 20px;
@@ -111,8 +107,6 @@
     </div>
 </div>
 
-<style> .tiny { font-size: 0.6rem; } </style>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
@@ -138,11 +132,16 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // ======================================================================
-// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
+// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES (SYNCED TO VHDL)
 // ======================================================================
 const STEPPER_TIME_PER_360_MS = 30000; 
-const SERVO_DROP_PER_ROTATION = 6;   
+const SERVO_DROP_PER_ROTATION = 6.0;   
 const MOTOR_START_DELAY_MS = 300;      
+const SWEEP_PAUSE_MS = 300; 
+
+// PHYSICAL MOUNTING OFFSETS (To fix the bubble parallax effect)
+const YAW_RADIUS_OFFSET_M = 0.03; // Lidar is 3cm outwards from the center of rotation
+const YAW_HEIGHT_OFFSET_M = 0.02; // Lidar is 2cm above the stepper motor center
 
 // ======================================================================
 // 3. THREE.JS — CREATE A 3D ENVIRONMENT
@@ -172,6 +171,15 @@ const light = new THREE.PointLight(0xffffff, 1);
 light.position.set(5, 5, 5);
 scene.add(light);
 
+// --- ADD: SCANNER ORIGIN MARKER ---
+// A large, highly visible red sphere exactly at (0,0,0) to show the base
+const originGeometry = new THREE.SphereGeometry(0.05, 16, 16); // 10cm diameter
+const originMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Solid Red
+const originMarker = new THREE.Mesh(originGeometry, originMaterial);
+originMarker.name = "originMarker"; // Named so the reset function ignores it
+originMarker.position.set(0, 0, 0);
+scene.add(originMarker);
+
 const BOUNDS = {
     minX: -5.0, maxX: 5.0,  
     minY: -2.0, maxY: 5.0,  
@@ -190,12 +198,10 @@ let lastMpuTimestamp = 0;
 let isFirstMpuPoint = true;
 const ALPHA = 0.96;
 
-// Variables for mechanical calculation tracking
 let scanState = 'IDLE'; 
 let firstPointTimestamp = 0;
 let lastValidPoint = null;
 
-// Queuing system variables
 let pointQueue = [];
 let lastDrawTime = Date.now();
 
@@ -210,7 +216,6 @@ function createDot(x, y, z) {
         return; 
     }
 
-    // 0.5cm (0.005) minimum distance check between points
     if (allPoints.length > 0) {
         const last = allPoints[allPoints.length - 1];
         const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
@@ -221,7 +226,6 @@ function createDot(x, y, z) {
     const hue = Math.abs(y % 1); 
     pointColor.setHSL(hue, 1, 0.5);
 
-    // 1mm radius (2mm diameter) for cleaner looking points
     const geometry = new THREE.SphereGeometry(0.007, 8, 8);
     const material = new THREE.MeshBasicMaterial({ color: pointColor });
     const sphere = new THREE.Mesh(geometry, material);
@@ -243,7 +247,6 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let currentBatchMax = maxTimestampProcessed;
 
-    // Detect if the ESP/Hardware restarted (timestamps suddenly reset to 0)
     if (batchData.length > 0 && batchData[0].t !== undefined) {
         if (batchData[0].t < maxTimestampProcessed - 5000) {
             maxTimestampProcessed = 0;
@@ -255,7 +258,6 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
     batchData.forEach((dataPoint) => {
         if (dataPoint.d === undefined || dataPoint.t === undefined) return;
 
-        // Queue newly seen points
         if (dataPoint.t > maxTimestampProcessed) {
             pointQueue.push(dataPoint);
             
@@ -282,7 +284,7 @@ function processPoint(dataPoint) {
 
     // --- PART A: MPU6050 LOGIC (FOR UI ONLY) ---
     if (dataPoint.g && dataPoint.a) {
-        let dt = 0.02; // Default for first reading
+        let dt = 0.02; 
         if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
             dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
             if (dt <= 0 || dt > 1.0) dt = 0.02; 
@@ -308,7 +310,7 @@ function processPoint(dataPoint) {
         }
     }
 
-    // --- PART B: PING-PONG MECHANICAL LOGIC (FOR 3D DOTS ONLY) ---
+    // --- PART B: PERFECT SYNC MECHANICAL LOGIC ---
     let elapsed_ms = dataPoint.t - firstPointTimestamp;
     let moving_time_ms = elapsed_ms - MOTOR_START_DELAY_MS;
 
@@ -316,10 +318,18 @@ function processPoint(dataPoint) {
     let currentPitch = 0;
 
     if (moving_time_ms > 0) {
-        let sweeps = Math.floor(moving_time_ms / STEPPER_TIME_PER_360_MS);
-        let progress = (moving_time_ms % STEPPER_TIME_PER_360_MS) / STEPPER_TIME_PER_360_MS;
+        const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
+        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
 
-        // Even sweeps go forward, Odd sweeps go backward
+        let progress = 0;
+        
+        if (time_in_sweep < STEPPER_TIME_PER_360_MS) {
+            progress = time_in_sweep / STEPPER_TIME_PER_360_MS;
+        } else {
+            progress = 1.0; 
+        }
+
         if (sweeps % 2 === 0) {
             currentYaw = progress * 360; 
         } else {
@@ -335,13 +345,21 @@ function processPoint(dataPoint) {
 
     const distCm = Number(dataPoint.d);
     if (distCm > 5 && distCm <= 1200) { 
-        const radius = distCm / 100.0; 
+        const radiusM = distCm / 100.0; 
         
-        let point = new THREE.Vector3(0, radius, 0); 
+        // 1. RAW LASER: Pointing straight up initially
+        let point = new THREE.Vector3(0, radiusM, 0); 
         
+        // 2. TILT (SERVO): Pivot the laser around the X-axis
         const xAxis = new THREE.Vector3(1, 0, 0);
         point.applyAxisAngle(xAxis, pitch * (Math.PI / 180));
 
+        // 3. PHYSICAL OFFSETS: Move the tilted assembly outward and upward 
+        // This stops the spherical "bubble" by offsetting the pivot point.
+        point.y += YAW_HEIGHT_OFFSET_M; // Elevate 2cm above the stepper
+        point.z += YAW_RADIUS_OFFSET_M; // Push outward 3cm from the center of rotation
+
+        // 4. PAN (STEPPER): Spin the entire offset assembly around the Y-axis
         const yAxis = new THREE.Vector3(0, 1, 0);
         point.applyAxisAngle(yAxis, yaw * (Math.PI / 180));
 
@@ -384,7 +402,8 @@ function resetScan() {
 
     for (let i = scene.children.length - 1; i >= 0; i--) {
         const obj = scene.children[i];
-        if (obj.type === "Mesh" && obj !== grid) {
+        // Updated condition to protect the red originMarker from being deleted
+        if (obj.type === "Mesh" && obj !== grid && obj.name !== "originMarker") {
             scene.remove(obj);
             if(obj.geometry) obj.geometry.dispose();
             if(obj.material) obj.material.dispose();
@@ -445,25 +464,20 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    // Elastic Rubber Band Logic
     if (pointQueue.length > 0) {
-        let dynamicDrawInterval = 166; // Standard pace (~30 points in 5 seconds)
+        let dynamicDrawInterval = 166; 
 
-        // If the queue is huge, drop interval to catch up instantly
         if (pointQueue.length > 60) dynamicDrawInterval = 5; 
         else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
-        // If the queue is healthy, proceed normally
         else if (pointQueue.length > 20) dynamicDrawInterval = 120;
-        // If the queue is running out (batch is late), slow down to stretch out the animation
         else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
-        else dynamicDrawInterval = 400; // Almost empty, stretch it as long as possible
+        else dynamicDrawInterval = 400; 
 
-        // Draw points based on the dynamic interval
         while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
             let nextDataPoint = pointQueue.shift();
             processPoint(nextDataPoint);
             timeElapsed -= dynamicDrawInterval;
-            lastDrawTime = now - timeElapsed; // Carries over remainder milliseconds flawlessly
+            lastDrawTime = now - timeElapsed; 
         }
     }
 
