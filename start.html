@@ -135,7 +135,11 @@ firebase.initializeApp(firebaseConfig);
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
 const STEPPER_TIME_PER_360_MS = 30000; 
-const SERVO_DROP_PER_ROTATION = 3.0;   
+
+// THE BUBBLE FIX: Changed back to 6.0 to match VHDL. 
+// If the walls bow the *opposite* way (like a bowl), lower this slightly (e.g. 5.5).
+const SERVO_DROP_PER_ROTATION = 6.0;   
+
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
@@ -189,9 +193,9 @@ let allPoints = [];
 let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-// NEW TIME TRACKING SYSTEM: Prevents resets and desyncs
-let scanStartGlobalTime = 0;  // Absolute master timeline locked on "START SCAN"
-let espTimeOffset = null;     // Difference between local clock and ESP clock
+// Time Tracking logic
+let scanStartGlobalTime = 0; 
+let espTimeOffset = null;     
 let ignoreOldData = false; 
 
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
@@ -245,27 +249,28 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let currentBatchMax = maxTimestampProcessed;
 
-    // Detect hardware reset/reboot (ESP clock drops dramatically)
     if (batchData.length > 0 && batchData[0].t !== undefined) {
         if (batchData[0].t < maxTimestampProcessed - 5000) {
             maxTimestampProcessed = 0;
             currentBatchMax = 0;
-            espTimeOffset = null; // Force a time re-sync so the physical position isn't lost!
+            if (isScanning) {
+                scanStartLocalTime = Date.now();
+                firstPointTimestamp = null;
+                ignoreOldData = true;
+            }
         }
     }
 
-    // Flush old firebase data right after clicking "START SCAN"
     if (ignoreOldData) {
         batchData.forEach(p => {
             if (p.t > currentBatchMax) currentBatchMax = p.t;
         });
         maxTimestampProcessed = currentBatchMax;
-        espTimeOffset = Date.now() - currentBatchMax; // Synchronize clocks
+        espTimeOffset = Date.now() - currentBatchMax; 
         ignoreOldData = false;
         return; 
     }
 
-    // Sync clocks if we just booted or ESP restarted
     if (espTimeOffset === null && batchData.length > 0) {
         let latest_t = batchData[batchData.length - 1].t;
         espTimeOffset = Date.now() - latest_t;
@@ -293,12 +298,11 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 function processPoint(dataPoint) {
     if (!isScanning) return;
 
-    // MPU Logic (UI Display only)
     if (dataPoint.g && dataPoint.a) {
         let dt = 0.02; 
         if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
             dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
-            if (dt <= 0 || dt > 1.0) dt = 0.02; // Protects against reboots
+            if (dt <= 0 || dt > 1.0) dt = 0.02; 
         }
         lastMpuTimestamp = dataPoint.t;
 
@@ -321,7 +325,6 @@ function processPoint(dataPoint) {
         }
     }
 
-    // Translate ESP time to Absolute Global Time (Prevents losing track if ESP reboots)
     let absolute_point_time = dataPoint.t + espTimeOffset;
     let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
 
@@ -346,10 +349,8 @@ function processPoint(dataPoint) {
 
     const distCm = Number(dataPoint.d);
     
-    // Update ONLY Distance here (Angles updated continuously in animate loop)
     document.getElementById("valDist").innerText = distCm + "cm";
 
-    // Distance threshold filters out inner-circle "phantom points"
     if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         let point = new THREE.Vector3(0, radiusM, 0); 
@@ -367,7 +368,6 @@ function processPoint(dataPoint) {
         lastValidPoint = point;
     }
 
-    // UI Updates for MPU
     let displayYaw = ((mpuYaw % 360) + 360) % 360; 
     let displayPitch = ((mpuPitch % 360) + 360) % 360;
     if (displayPitch > 180) displayPitch -= 360; 
@@ -425,8 +425,8 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
-                scanStartGlobalTime = Date.now(); // Anchor the timeline instantly
-                ignoreOldData = true; // Flushes stale data out
+                scanStartGlobalTime = Date.now(); 
+                ignoreOldData = true; 
                 pointQueue = []; 
                 espTimeOffset = null;
             }
@@ -461,7 +461,6 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    // --- INSTANT SMOOTH UI UPDATES ---
     if (isScanning && scanStartGlobalTime > 0) {
         let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
@@ -486,7 +485,6 @@ function animate() {
         document.getElementById("valB").innerText = uiPitch.toFixed(1) + "°";
     }
 
-    // --- QUEUE PROCESSOR ---
     if (pointQueue.length > 0) {
         let dynamicDrawInterval = 166; 
 
