@@ -138,12 +138,8 @@ const STEPPER_TIME_PER_360_MS = 30000;
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
-// --- THE BUBBLE FIX (CALIBRATED) ---
-// Based on your observation: Starts at 97°, and at sweep 4 (VHDL 73°) it points at 90°.
-// 97° to 90° = 7 degrees physical drop over 4 sweeps. 
-// 7 / 4 = 1.75 degrees actual physical drop per rotation.
-const INITIAL_PITCH_FROM_FLOOR = 97.0; 
-const TRUE_PHYSICAL_DROP_PER_ROTATION = 1.75;   
+const INITIAL_PITCH_FROM_FLOOR = 114.0; 
+const SERVO_DROP_PER_ROTATION = 6.0;   
 
 const YAW_RADIUS_OFFSET_M = 0.04; 
 const YAW_HEIGHT_OFFSET_M = 0.07; 
@@ -190,12 +186,14 @@ const BOUNDS = {
 };
 
 // --- Global State Variables ---
+let allPoints = []; 
 let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-// Absolute timeline logic (Fixes the 30-60sec Wi-Fi drops causing Ghosting)
-let scanStartGlobalTime = 0; 
-let espTimeOffset = null;     
+// DYNAMIC TIMELINE ANCHORING (Fixes Hardware Pauses & Ghosting)
+let softwareActiveTimeMs = 0;
+let lastUpdateLocalTime = 0;
+let isHardwarePaused = false;
 let ignoreOldData = false; 
 
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
@@ -218,8 +216,11 @@ function createDot(x, y, z) {
         return; 
     }
 
-    // MISSING POINTS FIX: Removed the "d < 0.005" distance filter. 
-    // It was deleting 95% of your valid data points because they mapped close together.
+    if (allPoints.length > 0) {
+        const last = allPoints[allPoints.length - 1];
+        const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
+        if (d < 0.005) return; 
+    }
 
     const pointColor = new THREE.Color();
     const hue = Math.abs(y % 1); 
@@ -231,6 +232,9 @@ function createDot(x, y, z) {
     
     sphere.position.set(x, y, z);
     scene.add(sphere);
+
+    const newVec = new THREE.Vector3(x, y, z);
+    allPoints.push(newVec);
 }
 
 // ======================================================================
@@ -243,30 +247,50 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let currentBatchMax = maxTimestampProcessed;
 
-    // Detect hardware reset (ESP restarts back to ~0 ms)
     if (batchData.length > 0 && batchData[0].t !== undefined) {
         if (batchData[0].t < maxTimestampProcessed - 5000) {
             maxTimestampProcessed = 0;
             currentBatchMax = 0;
-            espTimeOffset = null; // Forces a timeline re-sync
+            if (isScanning) {
+                ignoreOldData = true;
+            }
         }
     }
 
-    // Clear out stale points immediately when "START SCAN" is hit
     if (ignoreOldData) {
         batchData.forEach(p => {
             if (p.t > currentBatchMax) currentBatchMax = p.t;
         });
         maxTimestampProcessed = currentBatchMax;
-        espTimeOffset = Date.now() - currentBatchMax; 
         ignoreOldData = false;
+        
+        // Reset the dynamic timeline upon catching new data after a reset
+        softwareActiveTimeMs = 0;
+        lastUpdateLocalTime = Date.now();
+        isHardwarePaused = false;
         return; 
     }
 
-    // Sync ESP time to absolute web-browser time
-    if (espTimeOffset === null && batchData.length > 0) {
-        let latest_t = batchData[batchData.length - 1].t;
-        espTimeOffset = Date.now() - latest_t;
+    // Hardware Pause Detection & Recovery
+    let now = Date.now();
+    let timeSinceLastData = now - lastUpdateLocalTime;
+    
+    if (batchData[batchData.length - 1].t > maxTimestampProcessed) {
+        // We received fresh data! 
+        if (isHardwarePaused) {
+            // Hardware woke up. Resume the clock normally.
+            isHardwarePaused = false;
+            lastUpdateLocalTime = now;
+        } else {
+            // Normal operation. Accumulate active time.
+            softwareActiveTimeMs += timeSinceLastData;
+            lastUpdateLocalTime = now;
+        }
+    } else {
+        // We didn't receive fresh data. Hardware might be paused or lagging.
+        if (timeSinceLastData > 2000) { // If no fresh data for 2 seconds, freeze the clock
+            isHardwarePaused = true;
+        }
     }
 
     batchData.forEach((dataPoint) => {
@@ -274,6 +298,7 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
         if (dataPoint.t > maxTimestampProcessed) {
             pointQueue.push(dataPoint);
+            
             if (dataPoint.t > currentBatchMax) {
                 currentBatchMax = dataPoint.t;
             }
@@ -284,7 +309,7 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 });
 
 // ======================================================================
-// 6. PROCESS A SINGLE POINT (ABSOLUTE SYNC MAPPING)
+// 6. PROCESS A SINGLE POINT (PERFECT SYNC MAPPING)
 // ======================================================================
 
 function processPoint(dataPoint) {
@@ -317,11 +342,7 @@ function processPoint(dataPoint) {
         }
     }
 
-    // GHOSTING FIX: We no longer pause the software clock. The FPGA continues 
-    // to physically spin regardless of Wi-Fi lag. This strict timeline sync 
-    // ensures points map to the exact right physical angle even after a 60 sec dropout.
-    let absolute_point_time = dataPoint.t + espTimeOffset;
-    let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
+    let moving_time_ms = softwareActiveTimeMs - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
     let currentPitch = INITIAL_PITCH_FROM_FLOOR;
@@ -339,7 +360,7 @@ function processPoint(dataPoint) {
             currentYaw = 360 - (progress * 360); 
         }
 
-        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * TRUE_PHYSICAL_DROP_PER_ROTATION); 
+        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
     }
 
     const distCm = Number(dataPoint.d);
@@ -379,8 +400,9 @@ function processPoint(dataPoint) {
 // ======================================================================
 
 function resetScan() {
-    scanStartGlobalTime = 0;
-    espTimeOffset = null;
+    allPoints = [];
+    softwareActiveTimeMs = 0;
+    isHardwarePaused = false;
     ignoreOldData = false;
     pointQueue = []; 
     lastValidPoint = null;
@@ -419,10 +441,11 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
-                scanStartGlobalTime = Date.now(); 
+                softwareActiveTimeMs = 0;
+                lastUpdateLocalTime = Date.now();
+                isHardwarePaused = false;
                 ignoreOldData = true; 
                 pointQueue = []; 
-                espTimeOffset = null;
             }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
@@ -455,8 +478,8 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    if (isScanning && scanStartGlobalTime > 0) {
-        let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
+    if (isScanning && !isHardwarePaused) {
+        let ui_elapsed = softwareActiveTimeMs + (now - lastUpdateLocalTime) - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
         let uiPitch = INITIAL_PITCH_FROM_FLOOR;
 
@@ -472,7 +495,7 @@ function animate() {
             } else {
                 uiYaw = 360 - (progress * 360); 
             }
-            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * TRUE_PHYSICAL_DROP_PER_ROTATION); 
+            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
         }
 
         document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
@@ -480,8 +503,13 @@ function animate() {
     }
 
     if (pointQueue.length > 0) {
-        // Run queue extremely fast to catch up if batches dump late
-        let dynamicDrawInterval = pointQueue.length > 20 ? 5 : 50; 
+        let dynamicDrawInterval = 166; 
+
+        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
+        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
+        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
+        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
+        else dynamicDrawInterval = 400; 
 
         while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
             let nextDataPoint = pointQueue.shift();
