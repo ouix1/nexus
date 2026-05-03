@@ -189,14 +189,19 @@ let allPoints = [];
 let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-// Time Tracking logic to fix the "Blue Blob" and instant-start UI
-let scanStartLocalTime = 0;
-let firstPointTimestamp = null;
+// NEW TIME TRACKING SYSTEM: Prevents resets and desyncs
+let scanStartGlobalTime = 0;  // Absolute master timeline locked on "START SCAN"
+let espTimeOffset = null;     // Difference between local clock and ESP clock
 let ignoreOldData = false; 
 
+let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
+let lastMpuTimestamp = 0;
+let isFirstMpuPoint = true;
+const ALPHA = 0.96;
+
+let lastValidPoint = null;
 let pointQueue = [];
 let lastDrawTime = Date.now();
-let lastValidPoint = null;
 
 // ======================================================================
 // 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
@@ -240,27 +245,30 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let currentBatchMax = maxTimestampProcessed;
 
-    // Detect hardware reset
+    // Detect hardware reset/reboot (ESP clock drops dramatically)
     if (batchData.length > 0 && batchData[0].t !== undefined) {
         if (batchData[0].t < maxTimestampProcessed - 5000) {
             maxTimestampProcessed = 0;
             currentBatchMax = 0;
-            if (isScanning) {
-                scanStartLocalTime = Date.now();
-                firstPointTimestamp = null;
-                ignoreOldData = true;
-            }
+            espTimeOffset = null; // Force a time re-sync so the physical position isn't lost!
         }
     }
 
-    // NEW: "Blue Blob" Fix. Dump all old data sitting in Firebase from a previous scan
+    // Flush old firebase data right after clicking "START SCAN"
     if (ignoreOldData) {
         batchData.forEach(p => {
             if (p.t > currentBatchMax) currentBatchMax = p.t;
         });
         maxTimestampProcessed = currentBatchMax;
+        espTimeOffset = Date.now() - currentBatchMax; // Synchronize clocks
         ignoreOldData = false;
-        return; // Exit early so no stale data goes into the queue
+        return; 
+    }
+
+    // Sync clocks if we just booted or ESP restarted
+    if (espTimeOffset === null && batchData.length > 0) {
+        let latest_t = batchData[batchData.length - 1].t;
+        espTimeOffset = Date.now() - latest_t;
     }
 
     batchData.forEach((dataPoint) => {
@@ -285,30 +293,47 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 function processPoint(dataPoint) {
     if (!isScanning) return;
 
-    // Synchronize Hardware clock with Software clock on the very first fresh point
-    if (firstPointTimestamp === null) {
-        let local_elapsed = Date.now() - scanStartLocalTime;
-        // Anchor the hardware timestamp backwards so it perfectly matches our local start time
-        firstPointTimestamp = dataPoint.t - local_elapsed; 
+    // MPU Logic (UI Display only)
+    if (dataPoint.g && dataPoint.a) {
+        let dt = 0.02; 
+        if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
+            dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
+            if (dt <= 0 || dt > 1.0) dt = 0.02; // Protects against reboots
+        }
+        lastMpuTimestamp = dataPoint.t;
+
+        const gy = dataPoint.g.y; 
+        const gx = dataPoint.g.x; 
+        const gz = dataPoint.g.z; 
+
+        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
+        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
+
+        if (isFirstMpuPoint) {
+            mpuPitch = accPitch;
+            mpuRoll = accRoll; 
+            mpuYaw = 0;
+            isFirstMpuPoint = false;
+        } else {
+            mpuPitch = ALPHA * (mpuPitch + gy * dt) + (1 - ALPHA) * accPitch;
+            mpuRoll = ALPHA * (mpuRoll + gz * dt) + (1 - ALPHA) * accRoll;
+            mpuYaw += gx * dt; 
+        }
     }
 
-    let elapsed_ms = dataPoint.t - firstPointTimestamp - MOTOR_START_DELAY_MS;
+    // Translate ESP time to Absolute Global Time (Prevents losing track if ESP reboots)
+    let absolute_point_time = dataPoint.t + espTimeOffset;
+    let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
-    let currentPitch = 0;
+    let currentPitch = PITCH_OFFSET_DEGREES;
 
-    if (elapsed_ms > 0) {
+    if (moving_time_ms > 0) {
         const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
-        let sweeps = Math.floor(elapsed_ms / FULL_CYCLE_MS);
-        let time_in_sweep = elapsed_ms % FULL_CYCLE_MS;
+        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
+        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
 
-        let progress = 0;
-        
-        if (time_in_sweep < STEPPER_TIME_PER_360_MS) {
-            progress = time_in_sweep / STEPPER_TIME_PER_360_MS;
-        } else {
-            progress = 1.0; 
-        }
+        let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
 
         if (sweeps % 2 === 0) {
             currentYaw = progress * 360; 
@@ -321,10 +346,11 @@ function processPoint(dataPoint) {
 
     const distCm = Number(dataPoint.d);
     
-    // Update ONLY the Lidar Distance UI here (Angles are updated smoothly in the animate loop)
+    // Update ONLY Distance here (Angles updated continuously in animate loop)
     document.getElementById("valDist").innerText = distCm + "cm";
 
-    if (distCm > 5 && distCm <= 1200) { 
+    // Distance threshold filters out inner-circle "phantom points"
+    if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         let point = new THREE.Vector3(0, radiusM, 0); 
         
@@ -341,6 +367,13 @@ function processPoint(dataPoint) {
         lastValidPoint = point;
     }
 
+    // UI Updates for MPU
+    let displayYaw = ((mpuYaw % 360) + 360) % 360; 
+    let displayPitch = ((mpuPitch % 360) + 360) % 360;
+    if (displayPitch > 180) displayPitch -= 360; 
+
+    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
+
     if (lastValidPoint && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidPoint, 0.05);
     }
@@ -352,11 +385,15 @@ function processPoint(dataPoint) {
 
 function resetScan() {
     allPoints = [];
-    firstPointTimestamp = null;
-    scanStartLocalTime = 0;
+    scanStartGlobalTime = 0;
+    espTimeOffset = null;
+    ignoreOldData = false;
     pointQueue = []; 
     lastValidPoint = null;
-    ignoreOldData = false;
+
+    mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
+    lastMpuTimestamp = 0;
+    isFirstMpuPoint = true;
 
     for (let i = scene.children.length - 1; i >= 0; i--) {
         const obj = scene.children[i];
@@ -388,10 +425,10 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
-                scanStartLocalTime = Date.now(); // Start the UI spin immediately
-                ignoreOldData = true; // Drop stale Firebase data to prevent the blue blob
+                scanStartGlobalTime = Date.now(); // Anchor the timeline instantly
+                ignoreOldData = true; // Flushes stale data out
                 pointQueue = []; 
-                firstPointTimestamp = null;
+                espTimeOffset = null;
             }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
@@ -425,11 +462,10 @@ function animate() {
     let timeElapsed = now - lastDrawTime;
 
     // --- INSTANT SMOOTH UI UPDATES ---
-    // The UI now spins perfectly based on time, exactly mirroring the real scanner
-    if (isScanning && scanStartLocalTime > 0) {
-        let ui_elapsed = Date.now() - scanStartLocalTime - MOTOR_START_DELAY_MS;
+    if (isScanning && scanStartGlobalTime > 0) {
+        let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
-        let uiPitch = 0;
+        let uiPitch = PITCH_OFFSET_DEGREES;
 
         if (ui_elapsed > 0) {
             const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
