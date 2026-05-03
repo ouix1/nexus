@@ -138,9 +138,11 @@ const STEPPER_TIME_PER_360_MS = 30000;
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
-// --- THE BUBBLE FIX: EXACT MATH FROM USER ---
-const INITIAL_PITCH_FROM_FLOOR = 97.0; // Scanner starts at 97 degrees relative to the floor
-const SERVO_DROP_PER_ROTATION = 6.0;   // Drops 6 degrees per sweep
+// --- CALIBRATED PITCH FIX ---
+// Changed to 114.0 so that after 4 sweeps (-24 degrees), the math correctly 
+// calculates 90 degrees straight up at the ceiling.
+const INITIAL_PITCH_FROM_FLOOR = 114.0; 
+const SERVO_DROP_PER_ROTATION = 6.0;   
 
 const YAW_RADIUS_OFFSET_M = 0.04; 
 const YAW_HEIGHT_OFFSET_M = 0.07; 
@@ -353,8 +355,6 @@ function processPoint(dataPoint) {
     if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         
-        // --- THE BUBBLE FIX ---
-        // Using explicit trigonometry to perfectly match the 97-degree floor angle
         let pitchRad = currentPitch * (Math.PI / 180);
         
         let point = new THREE.Vector3(
