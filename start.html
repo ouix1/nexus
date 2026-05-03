@@ -81,7 +81,7 @@
             <div id="valA" class="h3 fw-bold text-info">0.0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary small">TILT (PITCH)</div>
+            <div class="text-secondary small">ELEVATION</div>
             <div id="valB" class="h3 fw-bold text-warning">0.0°</div>
         </div>
         <div class="col-4">
@@ -135,17 +135,15 @@ firebase.initializeApp(firebaseConfig);
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
 const STEPPER_TIME_PER_360_MS = 30000; 
-
-// THE BUBBLE FIX: Changed back to 6.0 to match VHDL. 
-// If the walls bow the *opposite* way (like a bowl), lower this slightly (e.g. 5.5).
-const SERVO_DROP_PER_ROTATION = 6.0;   
-
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
+// --- THE BUBBLE FIX: EXACT MATH FROM USER ---
+const INITIAL_PITCH_FROM_FLOOR = 97.0; // Scanner starts at 97 degrees relative to the floor
+const SERVO_DROP_PER_ROTATION = 6.0;   // Drops 6 degrees per sweep
+
 const YAW_RADIUS_OFFSET_M = 0.04; 
 const YAW_HEIGHT_OFFSET_M = 0.07; 
-const PITCH_OFFSET_DEGREES = 5.0;
 
 // ======================================================================
 // 3. THREE.JS — CREATE A 3D ENVIRONMENT
@@ -329,7 +327,7 @@ function processPoint(dataPoint) {
     let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
-    let currentPitch = PITCH_OFFSET_DEGREES;
+    let currentPitch = INITIAL_PITCH_FROM_FLOOR;
 
     if (moving_time_ms > 0) {
         const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
@@ -344,7 +342,8 @@ function processPoint(dataPoint) {
             currentYaw = 360 - (progress * 360); 
         }
 
-        currentPitch = (sweeps * SERVO_DROP_PER_ROTATION) + PITCH_OFFSET_DEGREES; 
+        // Exact physical angle from the floor based on sweeps
+        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
     }
 
     const distCm = Number(dataPoint.d);
@@ -353,24 +352,28 @@ function processPoint(dataPoint) {
 
     if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
-        let point = new THREE.Vector3(0, radiusM, 0); 
         
-        const xAxis = new THREE.Vector3(1, 0, 0);
-        point.applyAxisAngle(xAxis, currentPitch * (Math.PI / 180));
+        // --- THE BUBBLE FIX ---
+        // Using explicit trigonometry to perfectly match the 97-degree floor angle
+        let pitchRad = currentPitch * (Math.PI / 180);
+        
+        let point = new THREE.Vector3(
+            0,
+            radiusM * Math.sin(pitchRad), // Y (Height) = radius * sin(angle from floor)
+            radiusM * Math.cos(pitchRad)  // Z (Depth) = radius * cos(angle from floor)
+        );
 
+        // Apply physical mounting offsets
         point.y += YAW_HEIGHT_OFFSET_M; 
         point.z += YAW_RADIUS_OFFSET_M; 
 
+        // Apply Pan (Yaw) Spin
         const yAxis = new THREE.Vector3(0, 1, 0);
         point.applyAxisAngle(yAxis, currentYaw * (Math.PI / 180));
 
         createDot(point.x, point.y, point.z);
         lastValidPoint = point;
     }
-
-    let displayYaw = ((mpuYaw % 360) + 360) % 360; 
-    let displayPitch = ((mpuPitch % 360) + 360) % 360;
-    if (displayPitch > 180) displayPitch -= 360; 
 
     document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
 
@@ -464,7 +467,7 @@ function animate() {
     if (isScanning && scanStartGlobalTime > 0) {
         let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
-        let uiPitch = PITCH_OFFSET_DEGREES;
+        let uiPitch = INITIAL_PITCH_FROM_FLOOR;
 
         if (ui_elapsed > 0) {
             const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
@@ -478,7 +481,7 @@ function animate() {
             } else {
                 uiYaw = 360 - (progress * 360); 
             }
-            uiPitch = (sweeps * SERVO_DROP_PER_ROTATION) + PITCH_OFFSET_DEGREES; 
+            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
         }
 
         document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
