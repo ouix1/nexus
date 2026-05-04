@@ -371,7 +371,7 @@ function processPoint(dataPoint) {
         // FIX: The Mirroring Bug
         // Set to TRUE if your motor continually spins in one direction.
         // Set to FALSE if your motor sweeps left, stops, and sweeps back right.
-        const CONTINUOUS_ROTATION = true; 
+        const CONTINUOUS_ROTATION = false; 
 
         if (CONTINUOUS_ROTATION) {
             currentYaw = progress * 360; 
