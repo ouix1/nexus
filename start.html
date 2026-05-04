@@ -134,15 +134,15 @@ firebase.initializeApp(firebaseConfig);
 // ======================================================================
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
-const STEPPER_TIME_PER_360_MS = 30000; 
+const STEPPER_TIME_PER_360_MS = 5000; 
 const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
 
-const INITIAL_PITCH_FROM_FLOOR = 97.0; 
-const TRUE_PHYSICAL_DROP_PER_ROTATION = 1.75;   
+const INITIAL_PITCH_FROM_FLOOR = 90.0; 
+const SERVO_DROP_PER_ROTATION = 1.5;   
 
-const YAW_RADIUS_OFFSET_M = 0.04; 
-const YAW_HEIGHT_OFFSET_M = 0.07; 
+const YAW_RADIUS_OFFSET_M = 0.055; 
+const YAW_HEIGHT_OFFSET_M = 0.04; 
 
 // ======================================================================
 // 3. THREE.JS — CREATE A 3D ENVIRONMENT
@@ -186,12 +186,19 @@ const BOUNDS = {
 };
 
 // --- Global State Variables ---
+let allPoints = []; 
 let maxTimestampProcessed = 0; 
 let isScanning = false;
+
+// Time Tracking logic
+let scanStartGlobalTime = 0; 
+let espTimeOffset = null;     
 let ignoreOldData = false; 
 
-// PHASE-LOCKED LOOP TIMING (Fixes Ghosting and Clock Drift)
-let hardwareStartTime = null; 
+let lastUpdateLocalTime = 0;
+let isHardwarePaused = false;
+let pauseStartTime = 0;
+let totalPausedTimeMs = 0;
 
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
 let lastMpuTimestamp = 0;
@@ -217,12 +224,16 @@ function createDot(x, y, z) {
     const hue = Math.abs(y % 1); 
     pointColor.setHSL(hue, 1, 0.5);
 
-    const geometry = new THREE.SphereGeometry(0.007, 8, 8);
+    // Reduced dot size slightly so walls look cleaner with 100 points/sec
+    const geometry = new THREE.SphereGeometry(0.005, 8, 8);
     const material = new THREE.MeshBasicMaterial({ color: pointColor });
     const sphere = new THREE.Mesh(geometry, material);
     
     sphere.position.set(x, y, z);
     scene.add(sphere);
+
+    const newVec = new THREE.Vector3(x, y, z);
+    allPoints.push(newVec);
 }
 
 // ======================================================================
@@ -236,7 +247,6 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
     let batchMaxT = batchData[batchData.length - 1].t; 
     if (batchMaxT === undefined) return;
 
-    // Detect hardware reset
     if (batchMaxT < maxTimestampProcessed - 5000) {
         maxTimestampProcessed = 0;
         if (isScanning) ignoreOldData = true;
@@ -244,24 +254,44 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     if (ignoreOldData) {
         maxTimestampProcessed = batchMaxT;
-        hardwareStartTime = null; // Forces a timeline re-sync
+        espTimeOffset = Date.now() - batchMaxT; 
         ignoreOldData = false;
+        
+        lastUpdateLocalTime = Date.now();
+        isHardwarePaused = false;
+        totalPausedTimeMs = 0;
         return; 
     }
 
-    // Process new data
+    let now = Date.now();
+    let timeSinceLastData = now - lastUpdateLocalTime;
+
     if (batchMaxT > maxTimestampProcessed) {
-        
+        if (isHardwarePaused) {
+            isHardwarePaused = false;
+            totalPausedTimeMs += (now - pauseStartTime);
+        }
+        lastUpdateLocalTime = now;
+    } else {
+        if (!isHardwarePaused && timeSinceLastData > 2000) {
+            isHardwarePaused = true;
+            pauseStartTime = lastUpdateLocalTime + 2000;
+        }
+    }
+
+    if (batchMaxT > maxTimestampProcessed) {
         let timeSinceLastBatch = batchMaxT - maxTimestampProcessed;
         if (maxTimestampProcessed === 0 || timeSinceLastBatch > 10000) {
-            timeSinceLastBatch = 5000; 
+            timeSinceLastBatch = 1000; // Fast scan assumption for first batch
         }
 
         let batchSize = batchData.length;
         let startTime = batchMaxT - timeSinceLastBatch;
 
-        // BATCH DE-CLUMPING FIX: 
-        // Forcefully unroll the batch by interpolating individual timestamps
+        if (espTimeOffset === null) {
+            espTimeOffset = Date.now() - batchMaxT;
+        }
+
         for (let i = 0; i < batchSize; i++) {
             let dataPoint = batchData[i];
             if (dataPoint.d === undefined) continue;
@@ -270,7 +300,7 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
             pointQueue.push({
                 ...dataPoint,
-                t: interpolatedTime 
+                t: interpolatedTime
             });
         }
 
@@ -279,7 +309,7 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 });
 
 // ======================================================================
-// 6. PROCESS A SINGLE POINT (PHASE-LOCKED HARDWARE MAPPING)
+// 6. PROCESS A SINGLE POINT (SNAP-TO-GRID MAPPING)
 // ======================================================================
 
 function processPoint(dataPoint) {
@@ -312,39 +342,38 @@ function processPoint(dataPoint) {
         }
     }
 
-    // PHASE-LOCKED LOOP: Lock the starting anchor to the exact hardware timestamp
-    // This makes it completely immune to browser clock drift.
-    if (hardwareStartTime === null) {
-        hardwareStartTime = dataPoint.t;
-    }
-
-    let moving_time_ms = dataPoint.t - hardwareStartTime - MOTOR_START_DELAY_MS;
+    let absolute_point_time = dataPoint.t + espTimeOffset;
+    let moving_time_ms = absolute_point_time - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
     let currentPitch = INITIAL_PITCH_FROM_FLOOR;
 
     if (moving_time_ms > 0) {
         const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+        
+        // --- SNAP TO GRID FIX ---
+        // This mathematically forces the current sweep to reset to an exact 0.0 timeline
+        // preventing the "ghosting" walls from drifting outward due to lag.
         let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
+        
+        // The time inside the current active sweep (0 to 5000ms)
         let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
 
-        let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+        // Force progress to never exceed 1.0, locking it during the pause
+        let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? (time_in_sweep / STEPPER_TIME_PER_360_MS) : 1.0;
 
         if (sweeps % 2 === 0) {
-            currentYaw = progress * 360; 
+            currentYaw = progress * 360.0; 
         } else {
-            currentYaw = 360 - (progress * 360); 
+            currentYaw = 360.0 - (progress * 360.0); 
         }
 
-        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * TRUE_PHYSICAL_DROP_PER_ROTATION); 
+        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
     }
 
     const distCm = Number(dataPoint.d);
-    
-    // Update ONLY Distance here
     document.getElementById("valDist").innerText = distCm + "cm";
 
-    // Distance threshold filters out inner-circle "phantom points"
     if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         
@@ -368,10 +397,6 @@ function processPoint(dataPoint) {
 
     document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
 
-    // Smooth UI Angles Tracking
-    document.getElementById("valA").innerText = currentYaw.toFixed(1) + "°";
-    document.getElementById("valB").innerText = currentPitch.toFixed(1) + "°";
-
     if (lastValidPoint && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidPoint, 0.05);
     }
@@ -382,10 +407,17 @@ function processPoint(dataPoint) {
 // ======================================================================
 
 function resetScan() {
-    hardwareStartTime = null;
+    allPoints = [];
+    scanStartGlobalTime = 0;
+    espTimeOffset = null;
     ignoreOldData = false;
     pointQueue = []; 
     lastValidPoint = null;
+
+    lastUpdateLocalTime = 0;
+    isHardwarePaused = false;
+    pauseStartTime = 0;
+    totalPausedTimeMs = 0;
 
     mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
     lastMpuTimestamp = 0;
@@ -421,9 +453,15 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
+                scanStartGlobalTime = Date.now(); 
                 ignoreOldData = true; 
                 pointQueue = []; 
-                hardwareStartTime = null;
+                espTimeOffset = null;
+
+                lastUpdateLocalTime = Date.now();
+                isHardwarePaused = false;
+                pauseStartTime = 0;
+                totalPausedTimeMs = 0;
             }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
@@ -456,14 +494,33 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    if (pointQueue.length > 0) {
-        let dynamicDrawInterval = 166; 
+    if (isScanning && !isHardwarePaused && scanStartGlobalTime > 0) {
+        let ui_elapsed = Date.now() - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
+        let uiYaw = 0;
+        let uiPitch = INITIAL_PITCH_FROM_FLOOR;
 
-        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
-        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
-        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
-        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
-        else dynamicDrawInterval = 400; 
+        if (ui_elapsed > 0) {
+            const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+            let sweeps = Math.floor(ui_elapsed / FULL_CYCLE_MS);
+            let time_in_sweep = ui_elapsed % FULL_CYCLE_MS;
+            
+            let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+            
+            if (sweeps % 2 === 0) {
+                uiYaw = progress * 360; 
+            } else {
+                uiYaw = 360 - (progress * 360); 
+            }
+            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
+        }
+
+        document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
+        document.getElementById("valB").innerText = uiPitch.toFixed(1) + "°";
+    }
+
+    if (pointQueue.length > 0) {
+        // Run queue extremely fast to handle 100 points/sec cleanly
+        let dynamicDrawInterval = pointQueue.length > 50 ? 2 : 10; 
 
         while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
             let nextDataPoint = pointQueue.shift();
