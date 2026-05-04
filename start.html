@@ -352,43 +352,49 @@ function processPoint(dataPoint) {
         }
     }
 
-    // Absolute timeline calculates angle (Minus any time spent frozen via Wi-Fi drop)
     let absolute_point_time = dataPoint.t + espTimeOffset;
     let moving_time_ms = absolute_point_time - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
     let currentPitch = INITIAL_PITCH_FROM_FLOOR;
+    let is_paused = false;
 
     if (moving_time_ms > 0) {
         const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
         let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
         let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
 
-        let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+        // FIX: Flag if we are in the 300ms servo drop window
+        is_paused = time_in_sweep >= STEPPER_TIME_PER_360_MS;
+        let progress = is_paused ? 1.0 : (time_in_sweep / STEPPER_TIME_PER_360_MS);
 
-        if (sweeps % 2 === 0) {
+        // FIX: The Mirroring Bug
+        // Set to TRUE if your motor continually spins in one direction.
+        // Set to FALSE if your motor sweeps left, stops, and sweeps back right.
+        const CONTINUOUS_ROTATION = true; 
+
+        if (CONTINUOUS_ROTATION) {
             currentYaw = progress * 360; 
         } else {
-            currentYaw = 360 - (progress * 360); 
+            currentYaw = sweeps % 2 === 0 ? progress * 360 : 360 - (progress * 360); 
         }
 
         currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
     }
 
     const distCm = Number(dataPoint.d);
-    
     document.getElementById("valDist").innerText = distCm + "cm";
 
-    // Re-enabled close-range "phantom ring" filter (15cm)
-    if (distCm > 15 && distCm <= 1200) { 
+    // FIX: Only map points if we are NOT in the 300ms servo drop pause window
+    if (distCm > 15 && distCm <= 1200 && !is_paused) { 
         const radiusM = distCm / 100.0; 
-        
         let pitchRad = currentPitch * (Math.PI / 180);
         
+        // FIX: The 3D Math Bug
         let point = new THREE.Vector3(
             0,
-            radiusM * Math.sin(pitchRad), 
-            radiusM * Math.cos(pitchRad)  
+            -radiusM * Math.cos(pitchRad), // Y (Height) Maps to 0 when horizontal
+            radiusM * Math.sin(pitchRad)   // Z (Depth) Maps to full radius when horizontal
         );
 
         point.y += YAW_HEIGHT_OFFSET_M; 
@@ -500,7 +506,6 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    // UI Rotation (Pauses smoothly if Wi-Fi drops)
     if (isScanning && !isHardwarePaused && scanStartGlobalTime > 0) {
         let ui_elapsed = Date.now() - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
@@ -513,11 +518,13 @@ function animate() {
             
             let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
             
-            if (sweeps % 2 === 0) {
+            const CONTINUOUS_ROTATION = true;
+            if (CONTINUOUS_ROTATION) {
                 uiYaw = progress * 360; 
             } else {
-                uiYaw = 360 - (progress * 360); 
+                uiYaw = sweeps % 2 === 0 ? progress * 360 : 360 - (progress * 360); 
             }
+            
             uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
         }
 
