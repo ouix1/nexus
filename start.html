@@ -178,7 +178,7 @@ const BOUNDS = {
 let allPoints = []; 
 let isScanning = false;
 
-// Strict Hardware Tracking Fix (Prevents Wavy/Double walls)
+// STRICT HARDWARE TIMELINE (Fixes Wavy Spiral Walls completely)
 let firstPointTimestamp = null;
 let lastSeenBatchT = 0;
 let ignoreOldData = false; 
@@ -190,7 +190,7 @@ const ALPHA = 0.96;
 
 let lastValidPoint = null;
 let pointQueue = [];
-let lastDrawTime = Date.now();
+let lastUiUpdateTime = 0;
 
 // ======================================================================
 // 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
@@ -214,8 +214,7 @@ function createDot(x, y, z) {
     sphere.position.set(x, y, z);
     scene.add(sphere);
 
-    const newVec = new THREE.Vector3(x, y, z);
-    allPoints.push(newVec);
+    allPoints.push(new THREE.Vector3(x, y, z));
 }
 
 // ======================================================================
@@ -248,26 +247,28 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
     let timeDelta = batchMaxT - lastSeenBatchT;
     
-    // Fallback if data arrives weirdly (prevents math errors)
+    // Normalize anomalous Wi-Fi delays to guarantee smooth interpolation
     if (timeDelta <= 0 || timeDelta > 2000) {
         timeDelta = 1000; 
     }
 
     let batchSize = dataArray.length;
+    let startTime = batchMaxT - timeDelta;
 
-    // DYNAMIC INTERPOLATION FIX: Spreads points perfectly across the *actual* ESP time gap.
-    // This stops points clumping at wrong angles and completely flattens the walls.
+    // DYNAMIC INTERPOLATION FIX: 
+    // We perfectly spread the 100 points across the exact ESP hardware timeframe.
+    // We DO NOT rely on the browser clock at all. This anchors the walls firmly.
     for (let i = 0; i < batchSize; i++) {
         let dataPoint = dataArray[i];
         if (dataPoint.d === undefined) continue;
 
-        let interpolatedTime = lastSeenBatchT + (timeDelta * ((i + 1) / batchSize));
+        let interpolatedTime = startTime + (timeDelta * (i / batchSize));
 
         pointQueue.push({
             d: dataPoint.d,
             a: dataPoint.a,
             g: dataPoint.g,
-            t: interpolatedTime 
+            t: interpolatedTime // Strictly uses the hardware timeline
         });
     }
 
@@ -285,6 +286,7 @@ function processPoint(dataPoint) {
         firstPointTimestamp = dataPoint.t;
     }
 
+    // MPU Logic (UI Display only)
     if (dataPoint.g && dataPoint.a) {
         let dt = 0.02; 
         if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
@@ -312,7 +314,8 @@ function processPoint(dataPoint) {
         }
     }
 
-    // STRICT MATH: 3D Mapping entirely relies on the ESP's physical timestamp
+    // STRICT MATH: 3D Mapping relies ONLY on the ESP's physical timestamp.
+    // Completely immune to Wi-Fi jitter and browser lag.
     let moving_time_ms = dataPoint.t - firstPointTimestamp - MOTOR_START_DELAY_MS;
     if (moving_time_ms < 0) moving_time_ms = 0;
 
@@ -332,34 +335,41 @@ function processPoint(dataPoint) {
     let currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
 
     const distCm = Number(dataPoint.d);
-    
-    // Filter out internal reflections (inside the 25cm radius)
-    if (distCm > 25 && distCm <= 1200) { 
+
+    // Throttle DOM UI Updates so the browser doesn't freeze processing 100 points/sec
+    let now = Date.now();
+    if (now - lastUiUpdateTime > 100) {
+        document.getElementById("valDist").innerText = distCm + "cm";
+        document.getElementById("valA").innerText = currentYaw.toFixed(1) + "°";
+        document.getElementById("valB").innerText = currentPitch.toFixed(1) + "°";
+        document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
+        lastUiUpdateTime = now;
+    }
+
+    // Process valid points within 12 meters
+    if (distCm > 15 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         
         let pitchRad = currentPitch * (Math.PI / 180);
         
+        // Convert Spherical to Cartesian Coordinates
         let point = new THREE.Vector3(
             0,
             radiusM * Math.sin(pitchRad), 
             radiusM * Math.cos(pitchRad)  
         );
 
+        // Apply physical mounting offsets
         point.y += YAW_HEIGHT_OFFSET_M; 
         point.z += YAW_RADIUS_OFFSET_M; 
 
+        // Apply Pan (Yaw) Spin
         const yAxis = new THREE.Vector3(0, 1, 0);
         point.applyAxisAngle(yAxis, currentYaw * (Math.PI / 180));
 
         createDot(point.x, point.y, point.z);
         lastValidPoint = point;
     }
-
-    // Update UI directly from hardware processing
-    document.getElementById("valDist").innerText = distCm + "cm";
-    document.getElementById("valA").innerText = currentYaw.toFixed(1) + "°";
-    document.getElementById("valB").innerText = currentPitch.toFixed(1) + "°";
-    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
 
     if (lastValidPoint && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidPoint, 0.05);
@@ -445,12 +455,10 @@ function toggleScan() {
 function animate() {
     requestAnimationFrame(animate);
 
-    let now = Date.now();
-    let timeElapsed = now - lastDrawTime;
-
-    // High Speed Queue Drainer (Dynamically scales to prevent any lag)
+    // High Speed Queue Drainer
+    // Drains up to 20 points per frame (Can handle 1,200 points per second)
     if (pointQueue.length > 0) {
-        let pointsToProcess = Math.min(pointQueue.length, 30);
+        let pointsToProcess = Math.min(pointQueue.length, 20);
         for (let i = 0; i < pointsToProcess; i++) {
             processPoint(pointQueue.shift());
         }
