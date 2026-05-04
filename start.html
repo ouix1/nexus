@@ -29,13 +29,24 @@
 
     <div class="collapse navbar-collapse fw-bold" id="navbarSupportedContent">
       <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="home.html">Home</a></li>
-        <li class="nav-item"><a class="nav-link" href="gallery.html">gallery</a></li>
-        <li class="nav-item"><a class="nav-link" href="Our_team.html">Our Team</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="home.html">Home</a>
+          </li>
+        <li class="nav-item">
+          <a class="nav-link" href="gallery.html">gallery</a>
+          </li>
+        <li class="nav-item">
+          <a class="nav-link" href="Our_team.html">Our Team</a>
+          </li>
         <li>
-          <button type="button" class="nav-link btn btn-dark fw-bold" data-bs-toggle="modal" data-bs-target="#contactModal">Contact</button>
-        </li>
-        <li class="nav-item" id="startdiv"><a class="nav-link active" href="start.html">Lidar_scanner</a></li>
+          <button type="button" class="nav-link btn btn-dark fw-bold"
+            data-bs-toggle="modal" data-bs-target="#contactModal">
+            Contact
+          </button>
+          </li>
+        <li class="nav-item" id="startdiv">
+          <a class="nav-link active" href="start.html">Lidar_scanner</a>
+          </li>
       </ul>
     </div>
   </div>
@@ -123,10 +134,13 @@ firebase.initializeApp(firebaseConfig);
 // ======================================================================
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
-const STEPPER_TIME_PER_360_MS = 5000;  
+const STEPPER_TIME_PER_360_MS = 5000; 
 const MOTOR_START_DELAY_MS = 300;      
-const SWEEP_PAUSE_MS = 0;              
+const SWEEP_PAUSE_MS = 300; 
 
+// --- CALIBRATED PITCH FIX ---
+// Changed to 114.0 so that after 4 sweeps (-24 degrees), the math correctly 
+// calculates 90 degrees straight up at the ceiling.
 const INITIAL_PITCH_FROM_FLOOR = 90.0; 
 const SERVO_DROP_PER_ROTATION = 1.5;   
 
@@ -176,11 +190,12 @@ const BOUNDS = {
 
 // --- Global State Variables ---
 let allPoints = []; 
+let maxTimestampProcessed = 0; 
 let isScanning = false;
 
-// STRICT HARDWARE TIMELINE (Fixes Wavy Spiral Walls completely)
-let firstPointTimestamp = null;
-let lastSeenBatchT = 0;
+// Time Tracking logic
+let scanStartGlobalTime = 0; 
+let espTimeOffset = null;     
 let ignoreOldData = false; 
 
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
@@ -190,7 +205,7 @@ const ALPHA = 0.96;
 
 let lastValidPoint = null;
 let pointQueue = [];
-let lastUiUpdateTime = 0;
+let lastDrawTime = Date.now();
 
 // ======================================================================
 // 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
@@ -201,6 +216,12 @@ function createDot(x, y, z) {
 
     if (x < BOUNDS.minX || x > BOUNDS.maxX || y < BOUNDS.minY || y > BOUNDS.maxY || z < BOUNDS.minZ || z > BOUNDS.maxZ) {
         return; 
+    }
+
+    if (allPoints.length > 0) {
+        const last = allPoints[allPoints.length - 1];
+        const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
+        if (d < 0.005) return; 
     }
 
     const pointColor = new THREE.Color();
@@ -214,7 +235,8 @@ function createDot(x, y, z) {
     sphere.position.set(x, y, z);
     scene.add(sphere);
 
-    allPoints.push(new THREE.Vector3(x, y, z));
+    const newVec = new THREE.Vector3(x, y, z);
+    allPoints.push(newVec);
 }
 
 // ======================================================================
@@ -222,71 +244,60 @@ function createDot(x, y, z) {
 // ======================================================================
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
-    if (!isScanning) return;
-    
     const batchData = snapshot.val();
-    if (!batchData) return;
+    if (!batchData || !Array.isArray(batchData)) return;
 
-    let dataArray = Array.isArray(batchData) ? batchData : Object.values(batchData);
-    if (dataArray.length === 0) return;
+    let currentBatchMax = maxTimestampProcessed;
 
-    let batchMaxT = dataArray[dataArray.length - 1].t; 
-    if (batchMaxT === undefined || batchMaxT === lastSeenBatchT) return; 
-
-    // Detect hardware reset (ESP drops to 0)
-    if (lastSeenBatchT > 0 && batchMaxT < lastSeenBatchT - 5000) {
-        lastSeenBatchT = 0;
-        firstPointTimestamp = null;
+    if (batchData.length > 0 && batchData[0].t !== undefined) {
+        if (batchData[0].t < maxTimestampProcessed - 5000) {
+            maxTimestampProcessed = 0;
+            currentBatchMax = 0;
+            if (isScanning) {
+                scanStartLocalTime = Date.now();
+                firstPointTimestamp = null;
+                ignoreOldData = true;
+            }
+        }
     }
 
-    if (lastSeenBatchT === 0 || ignoreOldData) {
-        lastSeenBatchT = batchMaxT;
+    if (ignoreOldData) {
+        batchData.forEach(p => {
+            if (p.t > currentBatchMax) currentBatchMax = p.t;
+        });
+        maxTimestampProcessed = currentBatchMax;
+        espTimeOffset = Date.now() - currentBatchMax; 
         ignoreOldData = false;
         return; 
     }
 
-    let timeDelta = batchMaxT - lastSeenBatchT;
-    
-    // Normalize anomalous Wi-Fi delays to guarantee smooth interpolation
-    if (timeDelta <= 0 || timeDelta > 2000) {
-        timeDelta = 1000; 
+    if (espTimeOffset === null && batchData.length > 0) {
+        let latest_t = batchData[batchData.length - 1].t;
+        espTimeOffset = Date.now() - latest_t;
     }
 
-    let batchSize = dataArray.length;
-    let startTime = batchMaxT - timeDelta;
+    batchData.forEach((dataPoint) => {
+        if (dataPoint.d === undefined || dataPoint.t === undefined) return;
 
-    // DYNAMIC INTERPOLATION FIX: 
-    // We perfectly spread the 100 points across the exact ESP hardware timeframe.
-    // We DO NOT rely on the browser clock at all. This anchors the walls firmly.
-    for (let i = 0; i < batchSize; i++) {
-        let dataPoint = dataArray[i];
-        if (dataPoint.d === undefined) continue;
+        if (dataPoint.t > maxTimestampProcessed) {
+            pointQueue.push(dataPoint);
+            
+            if (dataPoint.t > currentBatchMax) {
+                currentBatchMax = dataPoint.t;
+            }
+        }
+    });
 
-        let interpolatedTime = startTime + (timeDelta * (i / batchSize));
-
-        pointQueue.push({
-            d: dataPoint.d,
-            a: dataPoint.a,
-            g: dataPoint.g,
-            t: interpolatedTime // Strictly uses the hardware timeline
-        });
-    }
-
-    lastSeenBatchT = batchMaxT;
+    maxTimestampProcessed = currentBatchMax;
 });
 
 // ======================================================================
-// 6. PROCESS A SINGLE POINT (ABSOLUTE HARDWARE TIMING)
+// 6. PROCESS A SINGLE POINT (PERFECT SYNC MAPPING)
 // ======================================================================
 
 function processPoint(dataPoint) {
     if (!isScanning) return;
 
-    if (firstPointTimestamp === null) {
-        firstPointTimestamp = dataPoint.t;
-    }
-
-    // MPU Logic (UI Display only)
     if (dataPoint.g && dataPoint.a) {
         let dt = 0.02; 
         if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
@@ -314,49 +325,42 @@ function processPoint(dataPoint) {
         }
     }
 
-    // STRICT MATH: 3D Mapping relies ONLY on the ESP's physical timestamp.
-    // Completely immune to Wi-Fi jitter and browser lag.
-    let moving_time_ms = dataPoint.t - firstPointTimestamp - MOTOR_START_DELAY_MS;
-    if (moving_time_ms < 0) moving_time_ms = 0;
-
-    const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
-    let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
-    let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
-
-    let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+    let absolute_point_time = dataPoint.t + espTimeOffset;
+    let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
-    if (sweeps % 2 === 0) {
-        currentYaw = progress * 360; 
-    } else {
-        currentYaw = 360 - (progress * 360); 
-    }
+    let currentPitch = INITIAL_PITCH_FROM_FLOOR;
 
-    let currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
+    if (moving_time_ms > 0) {
+        const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
+        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
+
+        let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+
+        if (sweeps % 2 === 0) {
+            currentYaw = progress * 360; 
+        } else {
+            currentYaw = 360 - (progress * 360); 
+        }
+
+        // Exact physical angle from the floor based on sweeps
+        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
+    }
 
     const distCm = Number(dataPoint.d);
+    
+    document.getElementById("valDist").innerText = distCm + "cm";
 
-    // Throttle DOM UI Updates so the browser doesn't freeze processing 100 points/sec
-    let now = Date.now();
-    if (now - lastUiUpdateTime > 100) {
-        document.getElementById("valDist").innerText = distCm + "cm";
-        document.getElementById("valA").innerText = currentYaw.toFixed(1) + "°";
-        document.getElementById("valB").innerText = currentPitch.toFixed(1) + "°";
-        document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
-        lastUiUpdateTime = now;
-    }
-
-    // Process valid points within 12 meters
-    if (distCm > 15 && distCm <= 1200) { 
+    if (distCm > 25 && distCm <= 1200) { 
         const radiusM = distCm / 100.0; 
         
         let pitchRad = currentPitch * (Math.PI / 180);
         
-        // Convert Spherical to Cartesian Coordinates
         let point = new THREE.Vector3(
             0,
-            radiusM * Math.sin(pitchRad), 
-            radiusM * Math.cos(pitchRad)  
+            radiusM * Math.sin(pitchRad), // Y (Height) = radius * sin(angle from floor)
+            radiusM * Math.cos(pitchRad)  // Z (Depth) = radius * cos(angle from floor)
         );
 
         // Apply physical mounting offsets
@@ -371,6 +375,8 @@ function processPoint(dataPoint) {
         lastValidPoint = point;
     }
 
+    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
+
     if (lastValidPoint && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidPoint, 0.05);
     }
@@ -382,8 +388,8 @@ function processPoint(dataPoint) {
 
 function resetScan() {
     allPoints = [];
-    firstPointTimestamp = null;
-    lastSeenBatchT = 0;
+    scanStartGlobalTime = 0;
+    espTimeOffset = null;
     ignoreOldData = false;
     pointQueue = []; 
     lastValidPoint = null;
@@ -422,10 +428,10 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
+                scanStartGlobalTime = Date.now(); 
                 ignoreOldData = true; 
                 pointQueue = []; 
-                firstPointTimestamp = null;
-                lastSeenBatchT = 0;
+                espTimeOffset = null;
             }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
@@ -449,18 +455,53 @@ function toggleScan() {
 }
 
 // ======================================================================
-// 8. ANIMATION LOOP
+// 8. ANIMATION & ELASTIC QUEUE PROCESSING LOOP
 // ======================================================================
 
 function animate() {
     requestAnimationFrame(animate);
 
-    // High Speed Queue Drainer
-    // Drains up to 20 points per frame (Can handle 1,200 points per second)
+    let now = Date.now();
+    let timeElapsed = now - lastDrawTime;
+
+    if (isScanning && scanStartGlobalTime > 0) {
+        let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
+        let uiYaw = 0;
+        let uiPitch = INITIAL_PITCH_FROM_FLOOR;
+
+        if (ui_elapsed > 0) {
+            const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
+            let sweeps = Math.floor(ui_elapsed / FULL_CYCLE_MS);
+            let time_in_sweep = ui_elapsed % FULL_CYCLE_MS;
+            
+            let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
+            
+            if (sweeps % 2 === 0) {
+                uiYaw = progress * 360; 
+            } else {
+                uiYaw = 360 - (progress * 360); 
+            }
+            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
+        }
+
+        document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
+        document.getElementById("valB").innerText = uiPitch.toFixed(1) + "°";
+    }
+
     if (pointQueue.length > 0) {
-        let pointsToProcess = Math.min(pointQueue.length, 20);
-        for (let i = 0; i < pointsToProcess; i++) {
-            processPoint(pointQueue.shift());
+        let dynamicDrawInterval = 166; 
+
+        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
+        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
+        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
+        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
+        else dynamicDrawInterval = 400; 
+
+        while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
+            let nextDataPoint = pointQueue.shift();
+            processPoint(nextDataPoint);
+            timeElapsed -= dynamicDrawInterval;
+            lastDrawTime = now - timeElapsed; 
         }
     }
 
