@@ -152,7 +152,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x202020); 
 
 const camera = new THREE.PerspectiveCamera(
-  75, window.innerWidth / window.innerHeight, 0.1, 1000                                         
+  75, window.innerWidth / window.innerHeight, 0.1, 1000                                        
 );
 camera.position.set(3, 3, 3);
 
@@ -220,8 +220,6 @@ function createDot(x, y, z) {
         return; 
     }
 
-    // THE BUG FIX: Entirely deleted the distance filter that was erasing 95% of valid points
-
     const pointColor = new THREE.Color();
     const hue = Math.abs(y % 1); 
     pointColor.setHSL(hue, 1, 0.5);
@@ -248,7 +246,6 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
     let batchMaxT = batchData[batchData.length - 1].t; 
     if (batchMaxT === undefined) return;
 
-    // Detect hardware reset
     if (batchMaxT < maxTimestampProcessed - 5000) {
         maxTimestampProcessed = 0;
         if (isScanning) ignoreOldData = true;
@@ -268,28 +265,24 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
     let now = Date.now();
     let timeSinceLastData = now - lastUpdateLocalTime;
 
-    // Pause & Ghosting Detector
     if (batchMaxT > maxTimestampProcessed) {
         if (isHardwarePaused) {
             isHardwarePaused = false;
-            // Accrue the exact amount of time the Wi-Fi was disconnected
             totalPausedTimeMs += (now - pauseStartTime);
         }
         lastUpdateLocalTime = now;
     } else {
         if (!isHardwarePaused && timeSinceLastData > 2000) {
-            // Hardware has been silent for 2 seconds. Pause the software clock.
             isHardwarePaused = true;
             pauseStartTime = lastUpdateLocalTime + 2000;
         }
     }
 
-    // Process new data
     if (batchMaxT > maxTimestampProcessed) {
         
         let timeSinceLastBatch = batchMaxT - maxTimestampProcessed;
         if (maxTimestampProcessed === 0 || timeSinceLastBatch > 10000) {
-            timeSinceLastBatch = 5000; // Assume 5 seconds for the first batch or huge gaps
+            timeSinceLastBatch = 5000; 
         }
 
         let batchSize = batchData.length;
@@ -299,9 +292,6 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
             espTimeOffset = Date.now() - batchMaxT;
         }
 
-        // BATCH DE-CLUMPING FIX: 
-        // Forcefully unroll the batch by interpolating individual timestamps
-        // This stops 36 points from drawing at the exact same physical angle
         for (let i = 0; i < batchSize; i++) {
             let dataPoint = batchData[i];
             if (dataPoint.d === undefined) continue;
@@ -310,7 +300,7 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 
             pointQueue.push({
                 ...dataPoint,
-                t: interpolatedTime // Replaces clumped timestamp with an unrolled one
+                t: interpolatedTime 
             });
         }
 
@@ -364,13 +354,10 @@ function processPoint(dataPoint) {
         let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
         let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
 
-        // FIX: Flag if we are in the 300ms servo drop window
         is_paused = time_in_sweep >= STEPPER_TIME_PER_360_MS;
         let progress = is_paused ? 1.0 : (time_in_sweep / STEPPER_TIME_PER_360_MS);
 
-        // FIX: The Mirroring Bug
-        // Set to TRUE if your motor continually spins in one direction.
-        // Set to FALSE if your motor sweeps left, stops, and sweeps back right.
+        // SYNC FIX: Set to FALSE so the software maps back and forth with the bouncy motor
         const CONTINUOUS_ROTATION = false; 
 
         if (CONTINUOUS_ROTATION) {
@@ -385,16 +372,16 @@ function processPoint(dataPoint) {
     const distCm = Number(dataPoint.d);
     document.getElementById("valDist").innerText = distCm + "cm";
 
-    // FIX: Only map points if we are NOT in the 300ms servo drop pause window
     if (distCm > 15 && distCm <= 1200 && !is_paused) { 
         const radiusM = distCm / 100.0; 
         let pitchRad = currentPitch * (Math.PI / 180);
         
-        // FIX: The 3D Math Bug
+        // 3D MATH FIX: Restored original trigonometric mapping for upward pointing LiDAR
+        // When pitch is 90 (Straight up), sin(90)=1 (Full height), cos(90)=0 (No depth)
         let point = new THREE.Vector3(
             0,
-            -radiusM * Math.cos(pitchRad), // Y (Height) Maps to 0 when horizontal
-            radiusM * Math.sin(pitchRad)   // Z (Depth) Maps to full radius when horizontal
+            radiusM * Math.sin(pitchRad),  // Y (Height) 
+            radiusM * Math.cos(pitchRad)   // Z (Depth) 
         );
 
         point.y += YAW_HEIGHT_OFFSET_M; 
@@ -518,7 +505,8 @@ function animate() {
             
             let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
             
-            const CONTINUOUS_ROTATION = true;
+            // UI SYNC FIX: Ensuring the UI numbers bounce back and forth just like the mapping math
+            const CONTINUOUS_ROTATION = false; 
             if (CONTINUOUS_ROTATION) {
                 uiYaw = progress * 360; 
             } else {
