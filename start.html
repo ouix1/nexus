@@ -134,11 +134,13 @@ firebase.initializeApp(firebaseConfig);
 // ======================================================================
 // 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
 // ======================================================================
-const STEPPER_TIME_PER_360_MS = 5000;  // 5 Seconds per full spin
+const STEPPER_TIME_PER_360_MS = 5000; 
 const MOTOR_START_DELAY_MS = 300;      
-const SWEEP_PAUSE_MS = 300;              // GHOST FIX: Removed 300ms pause to keep math glued to the hardware
+const SWEEP_PAUSE_MS = 300; 
 
-// THE BUBBLE FIX (Restored exactly to your hardware specs)
+// --- CALIBRATED PITCH FIX ---
+// Changed to 114.0 so that after 4 sweeps (-24 degrees), the math correctly 
+// calculates 90 degrees straight up at the ceiling.
 const INITIAL_PITCH_FROM_FLOOR = 90.0; 
 const SERVO_DROP_PER_ROTATION = 1.5;   
 
@@ -196,12 +198,6 @@ let scanStartGlobalTime = 0;
 let espTimeOffset = null;     
 let ignoreOldData = false; 
 
-let softwareActiveTimeMs = 0;
-let lastUpdateLocalTime = 0;
-let isHardwarePaused = false;
-let pauseStartTime = 0;
-let totalPausedTimeMs = 0;
-
 let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
 let lastMpuTimestamp = 0;
 let isFirstMpuPoint = true;
@@ -220,6 +216,12 @@ function createDot(x, y, z) {
 
     if (x < BOUNDS.minX || x > BOUNDS.maxX || y < BOUNDS.minY || y > BOUNDS.maxY || z < BOUNDS.minZ || z > BOUNDS.maxZ) {
         return; 
+    }
+
+    if (allPoints.length > 0) {
+        const last = allPoints[allPoints.length - 1];
+        const d = Math.sqrt((x - last.x)**2 + (y - last.y)**2 + (z - last.z)**2);
+        if (d < 0.005) return; 
     }
 
     const pointColor = new THREE.Color();
@@ -243,75 +245,50 @@ function createDot(x, y, z) {
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
     const batchData = snapshot.val();
-    if (!batchData || !Array.isArray(batchData) || batchData.length === 0) return;
+    if (!batchData || !Array.isArray(batchData)) return;
 
-    let batchMaxT = batchData[batchData.length - 1].t; 
-    if (batchMaxT === undefined) return;
+    let currentBatchMax = maxTimestampProcessed;
 
-    if (batchMaxT < maxTimestampProcessed - 5000) {
-        maxTimestampProcessed = 0;
-        if (isScanning) ignoreOldData = true;
+    if (batchData.length > 0 && batchData[0].t !== undefined) {
+        if (batchData[0].t < maxTimestampProcessed - 5000) {
+            maxTimestampProcessed = 0;
+            currentBatchMax = 0;
+            if (isScanning) {
+                scanStartLocalTime = Date.now();
+                firstPointTimestamp = null;
+                ignoreOldData = true;
+            }
+        }
     }
 
     if (ignoreOldData) {
-        maxTimestampProcessed = batchMaxT;
-        espTimeOffset = Date.now() - batchMaxT; 
+        batchData.forEach(p => {
+            if (p.t > currentBatchMax) currentBatchMax = p.t;
+        });
+        maxTimestampProcessed = currentBatchMax;
+        espTimeOffset = Date.now() - currentBatchMax; 
         ignoreOldData = false;
-        
-        softwareActiveTimeMs = 0;
-        lastUpdateLocalTime = Date.now();
-        isHardwarePaused = false;
-        totalPausedTimeMs = 0;
         return; 
     }
 
-    let now = Date.now();
-    let timeSinceLastData = now - lastUpdateLocalTime;
-
-    if (batchMaxT > maxTimestampProcessed) {
-        if (isHardwarePaused) {
-            isHardwarePaused = false;
-            totalPausedTimeMs += (now - pauseStartTime);
-        }
-        lastUpdateLocalTime = now;
-    } else {
-        if (!isHardwarePaused && timeSinceLastData > 2000) {
-            isHardwarePaused = true;
-            pauseStartTime = lastUpdateLocalTime + 2000;
-        }
+    if (espTimeOffset === null && batchData.length > 0) {
+        let latest_t = batchData[batchData.length - 1].t;
+        espTimeOffset = Date.now() - latest_t;
     }
 
-    if (batchMaxT > maxTimestampProcessed) {
-        
-        let timeSinceLastBatch = batchMaxT - maxTimestampProcessed;
-        
-        // BATCH TIMING FIX: Expecting ~100 points every 1 second (1000ms)
-        if (maxTimestampProcessed === 0 || timeSinceLastBatch > 2000 || timeSinceLastBatch < 0) {
-            timeSinceLastBatch = 1000; 
+    batchData.forEach((dataPoint) => {
+        if (dataPoint.d === undefined || dataPoint.t === undefined) return;
+
+        if (dataPoint.t > maxTimestampProcessed) {
+            pointQueue.push(dataPoint);
+            
+            if (dataPoint.t > currentBatchMax) {
+                currentBatchMax = dataPoint.t;
+            }
         }
+    });
 
-        let batchSize = batchData.length;
-        let startTime = batchMaxT - timeSinceLastBatch;
-
-        if (espTimeOffset === null) {
-            espTimeOffset = Date.now() - batchMaxT;
-        }
-
-        // DE-CLUMPING FIX: Unrolls the 100 points perfectly across the 1000ms window
-        for (let i = 0; i < batchSize; i++) {
-            let dataPoint = batchData[i];
-            if (dataPoint.d === undefined) continue;
-
-            let interpolatedTime = startTime + (timeSinceLastBatch / batchSize) * i;
-
-            pointQueue.push({
-                ...dataPoint,
-                t: interpolatedTime 
-            });
-        }
-
-        maxTimestampProcessed = batchMaxT;
-    }
+    maxTimestampProcessed = currentBatchMax;
 });
 
 // ======================================================================
@@ -349,7 +326,7 @@ function processPoint(dataPoint) {
     }
 
     let absolute_point_time = dataPoint.t + espTimeOffset;
-    let moving_time_ms = absolute_point_time - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
+    let moving_time_ms = absolute_point_time - scanStartGlobalTime - MOTOR_START_DELAY_MS;
 
     let currentYaw = 0;
     let currentPitch = INITIAL_PITCH_FROM_FLOOR;
@@ -367,6 +344,7 @@ function processPoint(dataPoint) {
             currentYaw = 360 - (progress * 360); 
         }
 
+        // Exact physical angle from the floor based on sweeps
         currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
     }
 
@@ -381,13 +359,15 @@ function processPoint(dataPoint) {
         
         let point = new THREE.Vector3(
             0,
-            radiusM * Math.sin(pitchRad), 
-            radiusM * Math.cos(pitchRad)  
+            radiusM * Math.sin(pitchRad), // Y (Height) = radius * sin(angle from floor)
+            radiusM * Math.cos(pitchRad)  // Z (Depth) = radius * cos(angle from floor)
         );
 
+        // Apply physical mounting offsets
         point.y += YAW_HEIGHT_OFFSET_M; 
         point.z += YAW_RADIUS_OFFSET_M; 
 
+        // Apply Pan (Yaw) Spin
         const yAxis = new THREE.Vector3(0, 1, 0);
         point.applyAxisAngle(yAxis, currentYaw * (Math.PI / 180));
 
@@ -413,11 +393,6 @@ function resetScan() {
     ignoreOldData = false;
     pointQueue = []; 
     lastValidPoint = null;
-
-    lastUpdateLocalTime = 0;
-    isHardwarePaused = false;
-    pauseStartTime = 0;
-    totalPausedTimeMs = 0;
 
     mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
     lastMpuTimestamp = 0;
@@ -457,11 +432,6 @@ window.onload = function() {
                 ignoreOldData = true; 
                 pointQueue = []; 
                 espTimeOffset = null;
-
-                lastUpdateLocalTime = Date.now();
-                isHardwarePaused = false;
-                pauseStartTime = 0;
-                totalPausedTimeMs = 0;
             }
             btn.innerText = "STOP SCAN";
             btn.classList.remove('btn-primary');
@@ -494,8 +464,8 @@ function animate() {
     let now = Date.now();
     let timeElapsed = now - lastDrawTime;
 
-    if (isScanning && !isHardwarePaused && scanStartGlobalTime > 0) {
-        let ui_elapsed = Date.now() - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
+    if (isScanning && scanStartGlobalTime > 0) {
+        let ui_elapsed = Date.now() - scanStartGlobalTime - MOTOR_START_DELAY_MS;
         let uiYaw = 0;
         let uiPitch = INITIAL_PITCH_FROM_FLOOR;
 
@@ -519,11 +489,13 @@ function animate() {
     }
 
     if (pointQueue.length > 0) {
-        // HIGH SPEED PROCESSOR: 10ms baseline (100 points/sec). Speeds up dynamically if queue builds up.
-        let dynamicDrawInterval = 10; 
+        let dynamicDrawInterval = 166; 
 
-        if (pointQueue.length > 200) dynamicDrawInterval = 2; 
-        else if (pointQueue.length > 50) dynamicDrawInterval = 5; 
+        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
+        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
+        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
+        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
+        else dynamicDrawInterval = 400; 
 
         while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
             let nextDataPoint = pointQueue.shift();
