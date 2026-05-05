@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>LIDAR 3D Viewer - Live Tuning & Progress</title>
+  <title>LIDAR 3D Viewer - Secured Live Sync</title>
   <style>
     body { margin: 0; overflow: hidden; background-color: #181818; }
   </style>
@@ -40,7 +40,7 @@
         right: 20px;
         z-index: 100;
         width: 300px;
-        display: none; /* Shown via media query on larger screens, or always shown */
+        display: none; 
     }
 
     @media (min-width: 768px) {
@@ -64,7 +64,11 @@
 <!-- LEFT PANEL: CONTROLS -->
 <div class="scanner-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
     
-    <h6 class="border-bottom border-secondary pb-2 mb-3 text-uppercase tracking-widest text-center text-light">MECHANICAL 3D SCANNER</h6>
+    <h6 class="border-bottom border-secondary pb-2 mb-3 text-uppercase tracking-widest text-center text-light position-relative">
+        MECHANICAL 3D SCANNER
+        <!-- SECURED ADMIN PADLOCK ICON -->
+        <i class="bi bi-lock-fill position-absolute end-0 text-secondary" style="cursor: pointer; top: 0;" id="adminLockBtn" onclick="promptAdmin()" title="Admin Login"></i>
+    </h6>
     
     <div class="row text-center mb-3">
         <div class="col-4">
@@ -86,37 +90,37 @@
     </button>
     <button onclick="resetScan()" class="btn btn-sm btn-outline-light w-100 mb-2">Reset System</button>
 
-    <!-- LIVE TUNING DROPDOWN -->
-    <div class="dropdown mt-3">
-        <button class="btn btn-outline-secondary w-100 dropdown-toggle" type="button" id="tuningDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-            <i class="bi bi-sliders me-2"></i> Live Sync Calibration
+    <!-- LIVE TUNING DROPDOWN (HIDDEN BY DEFAULT, REQUIRES PASSWORD) -->
+    <div class="dropdown mt-3" id="tuningDropdownWrapper" style="display: none;">
+        <button class="btn btn-outline-info w-100 dropdown-toggle fw-bold" type="button" id="tuningDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+            <i class="bi bi-sliders me-2"></i> Admin: Live Calibration
         </button>
-        <div class="dropdown-menu dropdown-menu-dark p-3 shadow-lg border border-secondary" aria-labelledby="tuningDropdown" style="width: 100%;">
-            <h6 class="text-secondary text-center mb-3" style="font-size: 0.75rem;">ADJUST TO FIX FLOATING POINTS</h6>
+        <div class="dropdown-menu dropdown-menu-dark p-3 shadow-lg border border-info" aria-labelledby="tuningDropdown" style="width: 100%;">
+            <h6 class="text-info text-center mb-3" style="font-size: 0.75rem;">GLOBAL BROADCAST ACTIVE</h6>
             <div class="row g-2">
                 <div class="col-6">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Start Delay: <span id="lblDelay" class="text-info fw-bold">300ms</span></label>
-                    <input type="range" class="form-range" id="delaySlider" min="0" max="2000" step="10" value="300" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="delaySlider" min="-1000" max="3000" step="10" oninput="onAdminSliderMove()">
                 </div>
                 <div class="col-6">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Sweep Time: <span id="lblSpeed" class="text-info fw-bold">5000ms</span></label>
-                    <input type="range" class="form-range" id="speedSlider" min="3000" max="7000" step="10" value="5000" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="speedSlider" min="3000" max="7000" step="10" oninput="onAdminSliderMove()">
                 </div>
                 <div class="col-6">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Start Pitch: <span id="lblInitPitch" class="text-info fw-bold">90°</span></label>
-                    <input type="range" class="form-range" id="initPitchSlider" min="45" max="135" step="1" value="90" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="initPitchSlider" min="45" max="135" step="1" oninput="onAdminSliderMove()">
                 </div>
                 <div class="col-6">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Pitch Drop: <span id="lblPitchDrop" class="text-info fw-bold">1.5°</span></label>
-                    <input type="range" class="form-range" id="pitchDropSlider" min="0.1" max="5.0" step="0.1" value="1.5" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="pitchDropSlider" min="0.1" max="5.0" step="0.1" oninput="onAdminSliderMove()">
                 </div>
                 <div class="col-12 mt-2">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Max Distance Limit: <span id="lblDist" class="text-warning fw-bold">600cm</span></label>
-                    <input type="range" class="form-range" id="distSlider" min="100" max="1200" step="10" value="600" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="distSlider" min="100" max="1200" step="10" oninput="onAdminSliderMove()">
                 </div>
                 <div class="col-12 mt-1">
                     <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Edge Noise Filter: <span id="lblEdge" class="text-success fw-bold">40cm</span></label>
-                    <input type="range" class="form-range" id="edgeSlider" min="5" max="200" step="5" value="40" oninput="updateTuning()">
+                    <input type="range" class="form-range" id="edgeSlider" min="5" max="200" step="5" oninput="onAdminSliderMove()">
                     <div class="text-muted" style="font-size: 0.6rem;">Drops points that jump too fast</div>
                 </div>
             </div>
@@ -131,9 +135,9 @@
 
 <!-- RIGHT PANEL: PROGRESS HUD -->
 <div class="progress-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
-    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS</h6>
+    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS (170°)</h6>
     <div class="d-flex justify-content-between text-secondary mb-1" style="font-size: 0.75rem;">
-        <span id="scanProgressText" class="fw-bold">0 / 90 Spins</span>
+        <span id="scanProgressText" class="fw-bold">0 / -- Spins</span>
         <span id="scanTimeLeft" class="text-info">--:-- left</span>
     </div>
     <div class="progress bg-black border border-secondary" style="height: 12px;">
@@ -143,14 +147,13 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<!-- REQUIRED FOR BOOTSTRAP DROPDOWNS -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
 <script>
 // ======================================================================
-// 1. FIREBASE CONFIGURATION
+// 1. FIREBASE CONFIGURATION & SECURITY
 // ======================================================================
 const firebaseConfig = {
   apiKey: "AIzaSyDr5USKStzLZ6OQCfTBbZBmqihhbpBNmCY",
@@ -163,13 +166,38 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 
+let isAuthenticated = false;
+
+// Prompts the user for the password when clicking the Padlock
+function promptAdmin() {
+    let pwd = prompt("Enter Administrator Password for Live Calibration:");
+    if (pwd === "sisma332") {
+        isAuthenticated = true;
+        document.getElementById('adminLockBtn').style.display = 'none'; // Hide padlock
+        document.getElementById('tuningDropdownWrapper').style.display = 'block'; // Show dropdown
+        updateAdminUIFromParams(); // Populate sliders with current global params
+    } else if (pwd !== null) {
+        alert("Access Denied: Incorrect Password.");
+    }
+}
+
 // ======================================================================
-// 2. MECHANICAL SYSTEM CONSTANTS
+// 2. MECHANICAL SYSTEM CONSTANTS & GLOBAL LIVE PARAMS
 // ======================================================================
 const SWEEP_PAUSE_MS = 300; 
 const YAW_RADIUS_OFFSET_M = 0.055; 
 const YAW_HEIGHT_OFFSET_M = 0.04; 
-const TARGET_SPINS = 90; // The goal amount of sweeps
+const TARGET_TOTAL_DROP_DEGREES = 170; // Physical hardware limit of the scanner
+
+// This object is the "Brain" used by EVERYONE (Admins and regular viewers)
+let liveParams = {
+    delay: 300,
+    speed: 5000,
+    initPitch: 90,
+    pitchDrop: 1.5,
+    distLimit: 600,
+    edgeLimit: 40
+};
 
 // ======================================================================
 // 3. THREE.JS — HIGH PERFORMANCE POINT CLOUD
@@ -198,6 +226,7 @@ scene.add(originMarker);
 let pointCloudGeometry = new THREE.BufferGeometry();
 let pointCloudMaterial = new THREE.PointsMaterial({ size: 0.025, vertexColors: true });
 let pointCloud = new THREE.Points(pointCloudGeometry, pointCloudMaterial);
+pointCloud.frustumCulled = false; // CAMERA FIX: Prevents points from disappearing when looking away!
 scene.add(pointCloud);
 
 let rawScannedData = []; 
@@ -207,22 +236,71 @@ let hardwareStartTime = 0;
 let isFirstHardwarePoint = true;
 
 // ======================================================================
-// 4. LIVE TUNING MATH ENGINE & PROGRESS TRACKER
+// 4. LIVE TUNING SYNC ENGINE (DECOUPLED FROM UI)
 // ======================================================================
 
-function updateTuning() {
-    document.getElementById('lblDelay').innerText = document.getElementById('delaySlider').value + "ms";
-    document.getElementById('lblSpeed').innerText = document.getElementById('speedSlider').value + "ms";
-    document.getElementById('lblInitPitch').innerText = document.getElementById('initPitchSlider').value + "°";
-    document.getElementById('lblPitchDrop').innerText = document.getElementById('pitchDropSlider').value + "°";
-    document.getElementById('lblDist').innerText = document.getElementById('distSlider').value + "cm";
-    
-    let edgeVal = document.getElementById('edgeSlider').value;
-    document.getElementById('lblEdge').innerText = edgeVal == 200 ? "OFF" : edgeVal + "cm";
-    
+// Triggered ONLY by the Admin physically moving a slider
+function onAdminSliderMove() {
+    if (!isAuthenticated) return;
+
+    // 1. Read sliders into the Global Brain
+    liveParams.delay = parseInt(document.getElementById('delaySlider').value);
+    liveParams.speed = parseInt(document.getElementById('speedSlider').value);
+    liveParams.initPitch = parseFloat(document.getElementById('initPitchSlider').value);
+    liveParams.pitchDrop = parseFloat(document.getElementById('pitchDropSlider').value);
+    liveParams.distLimit = parseInt(document.getElementById('distSlider').value);
+    liveParams.edgeLimit = parseInt(document.getElementById('edgeSlider').value);
+
+    // 2. Update Admin text labels
+    updateAdminUIFromParams();
+
+    // 3. Rebuild the Admin's 3D Cloud locally instantly
     rebuildPointCloud();
+
+    // 4. Broadcast changes to all other viewers via Firebase
+    firebase.database().ref('/liveSync').set(liveParams);
 }
 
+// Triggered for EVERYONE when Firebase broadcasts new settings
+firebase.database().ref('/liveSync').on('value', snapshot => {
+    const data = snapshot.val();
+    if (data) {
+        // Update the global brain for all users
+        liveParams.delay = parseInt(data.delay) || 300;
+        liveParams.speed = parseInt(data.speed) || 5000;
+        liveParams.initPitch = parseFloat(data.initPitch) || 90;
+        liveParams.pitchDrop = parseFloat(data.pitchDrop) || 1.5;
+        liveParams.distLimit = parseInt(data.distLimit) || 600;
+        liveParams.edgeLimit = parseInt(data.edgeLimit) || 40;
+
+        // Rebuild the 3D Map for everyone based on new parameters
+        rebuildPointCloud();
+
+        // If an Admin has the UI open, update their physical sliders so they match the remote broadcast
+        if (isAuthenticated) {
+            updateAdminUIFromParams();
+        }
+    }
+});
+
+// Updates the visible sliders and text labels (Only relevant for Admins)
+function updateAdminUIFromParams() {
+    document.getElementById('delaySlider').value = liveParams.delay;
+    document.getElementById('speedSlider').value = liveParams.speed;
+    document.getElementById('initPitchSlider').value = liveParams.initPitch;
+    document.getElementById('pitchDropSlider').value = liveParams.pitchDrop;
+    document.getElementById('distSlider').value = liveParams.distLimit;
+    document.getElementById('edgeSlider').value = liveParams.edgeLimit;
+
+    document.getElementById('lblDelay').innerText = liveParams.delay + "ms";
+    document.getElementById('lblSpeed').innerText = liveParams.speed + "ms";
+    document.getElementById('lblInitPitch').innerText = liveParams.initPitch + "°";
+    document.getElementById('lblPitchDrop').innerText = liveParams.pitchDrop + "°";
+    document.getElementById('lblDist').innerText = liveParams.distLimit + "cm";
+    document.getElementById('lblEdge').innerText = liveParams.edgeLimit == 200 ? "OFF" : liveParams.edgeLimit + "cm";
+}
+
+// Math Engine: Rebuilds 3D Points using pure JS variables (NO direct DOM dependencies)
 function rebuildPointCloud() {
     if (rawScannedData.length === 0) return;
 
@@ -230,48 +308,41 @@ function rebuildPointCloud() {
     const colors = [];
     const colorObj = new THREE.Color();
 
-    let motorDelayMs = parseInt(document.getElementById('delaySlider').value);
-    let sweepTimeMs = parseInt(document.getElementById('speedSlider').value);
-    let initPitch = parseFloat(document.getElementById('initPitchSlider').value);
-    let pitchDrop = parseFloat(document.getElementById('pitchDropSlider').value);
-    let maxDistLimit = parseInt(document.getElementById('distSlider').value);
-    let edgeLimit = parseInt(document.getElementById('edgeSlider').value);
+    const FULL_CYCLE_MS = liveParams.speed + SWEEP_PAUSE_MS;
     
-    const FULL_CYCLE_MS = sweepTimeMs + SWEEP_PAUSE_MS;
+    // Calculates how many 1.5 degree drops it takes to hit 170 degrees total
+    const TARGET_SPINS = Math.ceil(TARGET_TOTAL_DROP_DEGREES / liveParams.pitchDrop); 
 
     let lastValidVec = null;
     let prevDist = Number(rawScannedData[0].d); 
     
-    // Variables for Progress Tracker
     let maxSweepAchieved = 0;
     let maxTimeRunningMs = 0;
 
     for (let i = 0; i < rawScannedData.length; i++) {
         let pt = rawScannedData[i];
-        let moving_time_ms = pt.t - hardwareStartTime - motorDelayMs;
+        let moving_time_ms = pt.t - hardwareStartTime - liveParams.delay;
 
         if (moving_time_ms < 0) continue; 
 
         let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
         let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
         
-        // Track maximums for the Progress HUD
         if (sweeps > maxSweepAchieved) maxSweepAchieved = sweeps;
         if (moving_time_ms > maxTimeRunningMs) maxTimeRunningMs = moving_time_ms;
         
-        let progress = time_in_sweep / sweepTimeMs;
+        let progress = time_in_sweep / liveParams.speed;
         let is_paused = (progress > 1.0);
         if (is_paused) progress = 1.0;
 
         let currentYaw = (sweeps % 2 === 0) ? progress * 360 : 360 - (progress * 360); 
-        let currentPitch = initPitch - (sweeps * pitchDrop); 
+        let currentPitch = liveParams.initPitch - (sweeps * liveParams.pitchDrop); 
 
         let distCm = Number(pt.d);
         let deltaDist = Math.abs(distCm - prevDist);
 
-        // FILTER APPLIED: Max distance AND Edge Splitting (Mixed Pixel)
-        if (distCm > 15 && distCm <= maxDistLimit && !is_paused) { 
-            if (edgeLimit === 200 || deltaDist <= edgeLimit) {
+        if (distCm > 15 && distCm <= liveParams.distLimit && !is_paused) { 
+            if (liveParams.edgeLimit === 200 || deltaDist <= liveParams.edgeLimit) {
                 
                 let radiusM = distCm / 100.0; 
                 let pitchRad = currentPitch * (Math.PI / 180);
@@ -296,14 +367,12 @@ function rebuildPointCloud() {
         prevDist = distCm; 
     }
 
-    // Apply Math to GPU
     pointCloudGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     pointCloudGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     pointCloudGeometry.attributes.position.needsUpdate = true;
     pointCloudGeometry.attributes.color.needsUpdate = true;
 
-    // UPDATE THE PROGRESS HUD
-    updateProgressHUD(maxSweepAchieved, maxTimeRunningMs, FULL_CYCLE_MS);
+    updateProgressHUD(maxSweepAchieved, maxTimeRunningMs, FULL_CYCLE_MS, TARGET_SPINS);
 
     if (lastValidVec && document.getElementById("autoFollow").checked) {
         controls.target.lerp(lastValidVec, 0.05);
@@ -311,16 +380,14 @@ function rebuildPointCloud() {
 }
 
 // UPDATE PROGRESS UI LOGIC
-function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs) {
-    let displaySweep = Math.min(currentSweep, TARGET_SPINS);
-    let progressPct = (displaySweep / TARGET_SPINS) * 100;
+function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs, targetSpins) {
+    let displaySweep = Math.min(currentSweep, targetSpins);
+    let progressPct = (displaySweep / targetSpins) * 100;
     
-    // Update Bar & Text
     document.getElementById('scanProgressBar').style.width = progressPct + "%";
-    document.getElementById('scanProgressText').innerText = displaySweep + " / " + TARGET_SPINS + " Spins";
+    document.getElementById('scanProgressText').innerText = displaySweep + " / " + targetSpins + " Spins";
     
-    // Calculate Time Remaining
-    let totalExpectedTimeMs = TARGET_SPINS * fullCycleMs;
+    let totalExpectedTimeMs = targetSpins * fullCycleMs;
     let timeLeftMs = Math.max(0, totalExpectedTimeMs - runningTimeMs);
     let timeLeftSecs = Math.floor(timeLeftMs / 1000);
     
@@ -328,7 +395,7 @@ function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs) {
     let seconds = timeLeftSecs % 60;
     let timeString = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} left`;
     
-    if (displaySweep >= TARGET_SPINS) {
+    if (displaySweep >= targetSpins) {
         document.getElementById('scanProgressBar').classList.replace('bg-primary', 'bg-success');
         document.getElementById('scanProgressBar').classList.remove('progress-bar-animated');
         document.getElementById('scanTimeLeft').innerText = "Complete!";
@@ -342,7 +409,7 @@ function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs) {
 }
 
 // ======================================================================
-// 5. READ DATA FROM FIREBASE
+// 5. READ LIDAR DATA FROM FIREBASE
 // ======================================================================
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
@@ -397,8 +464,8 @@ function resetScan() {
     
     document.getElementById("valDist").innerText = "0cm";
     
-    // Reset Progress UI
-    updateProgressHUD(0, 0, 5000);
+    let targetSpins = Math.ceil(TARGET_TOTAL_DROP_DEGREES / liveParams.pitchDrop);
+    updateProgressHUD(0, 0, 5000, targetSpins);
     
     firebase.database().ref('toAltera').set(1);
 }
@@ -414,7 +481,9 @@ window.onload = function() {
                 isScanning = true;
                 isFirstHardwarePoint = true; 
                 rawScannedData = []; 
-                updateProgressHUD(0, 0, 5000);
+                
+                let targetSpins = Math.ceil(TARGET_TOTAL_DROP_DEGREES / liveParams.pitchDrop);
+                updateProgressHUD(0, 0, 5000, targetSpins);
             }
             btn.innerText = "STOP SCAN";
             btn.classList.replace('btn-primary', 'btn-danger');
