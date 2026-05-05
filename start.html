@@ -2,114 +2,149 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>LIDAR 3D Viewer</title>
+  <title>LIDAR 3D Viewer - Live Tuning & Progress</title>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin: 0; overflow: hidden; background-color: #181818; }
   </style>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-  <link rel="stylesheet" href="contact.html">  
-  <link rel="stylesheet" href="gallery.html">  
   <link rel="stylesheet" href="style.css"> 
-  <link rel="stylesheet" href="start.html">      
 </head>
 
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top shadow-sm">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="home.html">
       ne<span style="color: #0d6efd">x</span>us
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-      data-bs-target="#navbarSupportedContent">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-
-    <div class="collapse navbar-collapse fw-bold" id="navbarSupportedContent">
-      <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link" href="home.html">Home</a>
-          </li>
-        <li class="nav-item">
-          <a class="nav-link" href="gallery.html">gallery</a>
-          </li>
-        <li class="nav-item">
-          <a class="nav-link" href="Our_team.html">Our Team</a>
-          </li>
-        <li>
-          <button type="button" class="nav-link btn btn-dark fw-bold"
-            data-bs-toggle="modal" data-bs-target="#contactModal">
-            Contact
-          </button>
-          </li>
-        <li class="nav-item" id="startdiv">
-          <a class="nav-link active" href="start.html">Lidar_scanner</a>
-          </li>
-      </ul>
-    </div>
   </div>
 </nav>
 
 <style>
+    /* Main Control Panel (Left) */
     .scanner-panel {
         position: absolute;
-        top: 120px;
+        top: 80px;
         z-index: 100;
         width: 95%;
-        max-width: 350px;
+        max-width: 380px;
         left: 50%;
         transform: translateX(-50%);
     }
+    
+    /* Progress Panel (Right) */
+    .progress-panel {
+        position: absolute;
+        top: 80px;
+        right: 20px;
+        z-index: 100;
+        width: 300px;
+        display: none; /* Shown via media query on larger screens, or always shown */
+    }
 
     @media (min-width: 768px) {
-        .scanner-panel {
-            left: 20px;
-            transform: none;
+        .scanner-panel { left: 20px; transform: none; }
+        .progress-panel { display: block; }
+    }
+    
+    @media (max-width: 767px) {
+        .progress-panel {
+            top: auto;
+            bottom: 20px;
+            right: 50%;
+            transform: translateX(50%);
+            display: block;
+            width: 95%;
+            max-width: 380px;
         }
     }
 </style>
 
-<div class="scanner-panel bg-dark p-4 rounded-4 shadow-lg border border-secondary text-white">
+<!-- LEFT PANEL: CONTROLS -->
+<div class="scanner-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
     
-    <h5 class="border-bottom border-secondary pb-2 mb-4 text-uppercase small tracking-widest text-center">MECHANICAL 3D SCANNER</h5>
+    <h6 class="border-bottom border-secondary pb-2 mb-3 text-uppercase tracking-widest text-center text-light">MECHANICAL 3D SCANNER</h6>
     
-    <div class="row text-center mb-4">
+    <div class="row text-center mb-3">
         <div class="col-4">
-            <div class="text-secondary small">PAN (YAW)</div>
-            <div id="valA" class="h3 fw-bold text-info">0.0°</div>
+            <div class="text-secondary" style="font-size: 0.7rem;">PITCH (IMU)</div>
+            <div id="valB" class="h5 fw-bold text-warning">0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary small">ELEVATION</div>
-            <div id="valB" class="h3 fw-bold text-warning">0.0°</div>
+            <div class="text-secondary" style="font-size: 0.7rem;">ROLL (IMU)</div>
+            <div id="valC" class="h5 fw-bold text-danger">0°</div>
         </div>
         <div class="col-4">
-            <div class="text-secondary small">ROLL</div>
-            <div id="valC" class="h3 fw-bold text-danger">0.0°</div>
+            <div class="text-secondary" style="font-size: 0.7rem;">LIDAR</div>
+            <div id="valDist" class="h5 fw-bold text-success">0cm</div>
         </div>
     </div>
-
-    <div class="text-center mb-4 py-3 bg-black bg-opacity-25 rounded-3">
-        <span class="text-secondary">LIDAR: </span>
-        <span id="valDist" class="h3 text-success fw-bold">0cm</span>
-    </div>
     
-    <button id="toggleBtn" onclick="toggleScan()" class="btn btn-lg btn-primary w-100 mb-3 py-3 fw-bold shadow">
+    <button id="toggleBtn" onclick="toggleScan()" class="btn btn-primary w-100 mb-2 fw-bold shadow-sm">
         START SCAN
     </button>
+    <button onclick="resetScan()" class="btn btn-sm btn-outline-light w-100 mb-2">Reset System</button>
 
-    <button onclick="resetScan()" class="btn btn-md btn-outline-light w-100 mb-3">Reset System</button>
+    <!-- LIVE TUNING DROPDOWN -->
+    <div class="dropdown mt-3">
+        <button class="btn btn-outline-secondary w-100 dropdown-toggle" type="button" id="tuningDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+            <i class="bi bi-sliders me-2"></i> Live Sync Calibration
+        </button>
+        <div class="dropdown-menu dropdown-menu-dark p-3 shadow-lg border border-secondary" aria-labelledby="tuningDropdown" style="width: 100%;">
+            <h6 class="text-secondary text-center mb-3" style="font-size: 0.75rem;">ADJUST TO FIX FLOATING POINTS</h6>
+            <div class="row g-2">
+                <div class="col-6">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Start Delay: <span id="lblDelay" class="text-info fw-bold">300ms</span></label>
+                    <input type="range" class="form-range" id="delaySlider" min="0" max="2000" step="10" value="300" oninput="updateTuning()">
+                </div>
+                <div class="col-6">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Sweep Time: <span id="lblSpeed" class="text-info fw-bold">5000ms</span></label>
+                    <input type="range" class="form-range" id="speedSlider" min="3000" max="7000" step="10" value="5000" oninput="updateTuning()">
+                </div>
+                <div class="col-6">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Start Pitch: <span id="lblInitPitch" class="text-info fw-bold">90°</span></label>
+                    <input type="range" class="form-range" id="initPitchSlider" min="45" max="135" step="1" value="90" oninput="updateTuning()">
+                </div>
+                <div class="col-6">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Pitch Drop: <span id="lblPitchDrop" class="text-info fw-bold">1.5°</span></label>
+                    <input type="range" class="form-range" id="pitchDropSlider" min="0.1" max="5.0" step="0.1" value="1.5" oninput="updateTuning()">
+                </div>
+                <div class="col-12 mt-2">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Max Distance Limit: <span id="lblDist" class="text-warning fw-bold">600cm</span></label>
+                    <input type="range" class="form-range" id="distSlider" min="100" max="1200" step="10" value="600" oninput="updateTuning()">
+                </div>
+                <div class="col-12 mt-1">
+                    <label class="form-label text-light mb-0" style="font-size: 0.7rem;">Edge Noise Filter: <span id="lblEdge" class="text-success fw-bold">40cm</span></label>
+                    <input type="range" class="form-range" id="edgeSlider" min="5" max="200" step="5" value="40" oninput="updateTuning()">
+                    <div class="text-muted" style="font-size: 0.6rem;">Drops points that jump too fast</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    <div class="form-check form-switch d-flex justify-content-center align-items-center gap-2 mt-2">
-        <input class="form-check-input" type="checkbox" id="autoFollow" checked style="width: 3em; height: 1.5em;">
-        <label class="form-check-label small text-secondary" for="autoFollow">Auto-Adjust Camera</label>
+    <div class="form-check form-switch d-flex justify-content-center align-items-center gap-2 mt-3">
+        <input class="form-check-input" type="checkbox" id="autoFollow" checked>
+        <label class="form-check-label text-secondary" style="font-size: 0.8rem;" for="autoFollow">Auto-Adjust Camera</label>
+    </div>
+</div>
+
+<!-- RIGHT PANEL: PROGRESS HUD -->
+<div class="progress-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
+    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS</h6>
+    <div class="d-flex justify-content-between text-secondary mb-1" style="font-size: 0.75rem;">
+        <span id="scanProgressText" class="fw-bold">0 / 90 Spins</span>
+        <span id="scanTimeLeft" class="text-info">--:-- left</span>
+    </div>
+    <div class="progress bg-black border border-secondary" style="height: 12px;">
+        <div id="scanProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%; transition: width 0.5s ease;"></div>
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
+<!-- REQUIRED FOR BOOTSTRAP DROPDOWNS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 
@@ -117,7 +152,6 @@
 // ======================================================================
 // 1. FIREBASE CONFIGURATION
 // ======================================================================
-
 const firebaseConfig = {
   apiKey: "AIzaSyDr5USKStzLZ6OQCfTBbZBmqihhbpBNmCY",
   authDomain: "dsc-dba80.firebaseapp.com",
@@ -125,36 +159,26 @@ const firebaseConfig = {
   storageBucket: "dsc-dba80.firebasestorage.app",
   messagingSenderId: "631849635750",
   appId: "1:631849635750:web:6a43bd500ffef3cced0967",
-  measurementId: "G-T7H2VFC56J",
   databaseURL: "https://dsc-dba80-default-rtdb.firebaseio.com/"
 };
-
 firebase.initializeApp(firebaseConfig);
 
 // ======================================================================
-// 2. MECHANICAL SYSTEM CONFIGURATION VARIABLES
+// 2. MECHANICAL SYSTEM CONSTANTS
 // ======================================================================
-const STEPPER_TIME_PER_360_MS = 5000; 
-const MOTOR_START_DELAY_MS = 300;      
 const SWEEP_PAUSE_MS = 300; 
-
-const INITIAL_PITCH_FROM_FLOOR = 90.0; 
-const SERVO_DROP_PER_ROTATION = 1.5;   
-
 const YAW_RADIUS_OFFSET_M = 0.055; 
 const YAW_HEIGHT_OFFSET_M = 0.04; 
+const TARGET_SPINS = 90; // The goal amount of sweeps
 
 // ======================================================================
-// 3. THREE.JS — CREATE A 3D ENVIRONMENT
+// 3. THREE.JS — HIGH PERFORMANCE POINT CLOUD
 // ======================================================================
-
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x202020); 
+scene.background = new THREE.Color(0x181818); 
 
-const camera = new THREE.PerspectiveCamera(
-  75, window.innerWidth / window.innerHeight, 0.1, 1000                                        
-);
-camera.position.set(3, 3, 3);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(2, 2, 3);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -164,283 +188,219 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true; 
 controls.dampingFactor = 0.05;
 
-const grid = new THREE.GridHelper(10, 10);
-grid.position.y = -2;
+const grid = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+grid.position.y = -1;
 scene.add(grid);
 
-const light = new THREE.PointLight(0xffffff, 1);
-light.position.set(5, 5, 5);
-scene.add(light);
-
-const originGeometry = new THREE.SphereGeometry(0.05, 16, 16); 
-const originMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); 
-const originMarker = new THREE.Mesh(originGeometry, originMaterial);
-originMarker.name = "originMarker"; 
-originMarker.position.set(0, 0, 0);
+const originMarker = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
 scene.add(originMarker);
 
-const BOUNDS = {
-    minX: -5.0, maxX: 5.0,  
-    minY: -2.0, maxY: 5.0,  
-    minZ: -5.0, maxZ: 5.0   
-};
+let pointCloudGeometry = new THREE.BufferGeometry();
+let pointCloudMaterial = new THREE.PointsMaterial({ size: 0.025, vertexColors: true });
+let pointCloud = new THREE.Points(pointCloudGeometry, pointCloudMaterial);
+scene.add(pointCloud);
 
-// --- Global State Variables ---
-let allPoints = []; 
-let maxTimestampProcessed = 0; 
+let rawScannedData = []; 
 let isScanning = false;
-
-// DYNAMIC TIMELINE TRACKING (Fixes 60-second Ghosting Pauses)
-let scanStartGlobalTime = 0; 
-let espTimeOffset = null;     
-let ignoreOldData = false; 
-
-let lastUpdateLocalTime = 0;
-let isHardwarePaused = false;
-let pauseStartTime = 0;
-let totalPausedTimeMs = 0;
-
-let mpuYaw = 0, mpuPitch = 0, mpuRoll = 0;
-let lastMpuTimestamp = 0;
-let isFirstMpuPoint = true;
-const ALPHA = 0.96;
-
-let lastValidPoint = null;
-let pointQueue = [];
-let lastDrawTime = Date.now();
+let maxTimestampProcessed = 0; 
+let hardwareStartTime = 0;
+let isFirstHardwarePoint = true;
 
 // ======================================================================
-// 4. FUNCTION TO CREATE A POINT (DOT) IN 3D
+// 4. LIVE TUNING MATH ENGINE & PROGRESS TRACKER
 // ======================================================================
 
-function createDot(x, y, z) {
-    if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+function updateTuning() {
+    document.getElementById('lblDelay').innerText = document.getElementById('delaySlider').value + "ms";
+    document.getElementById('lblSpeed').innerText = document.getElementById('speedSlider').value + "ms";
+    document.getElementById('lblInitPitch').innerText = document.getElementById('initPitchSlider').value + "°";
+    document.getElementById('lblPitchDrop').innerText = document.getElementById('pitchDropSlider').value + "°";
+    document.getElementById('lblDist').innerText = document.getElementById('distSlider').value + "cm";
+    
+    let edgeVal = document.getElementById('edgeSlider').value;
+    document.getElementById('lblEdge').innerText = edgeVal == 200 ? "OFF" : edgeVal + "cm";
+    
+    rebuildPointCloud();
+}
 
-    if (x < BOUNDS.minX || x > BOUNDS.maxX || y < BOUNDS.minY || y > BOUNDS.maxY || z < BOUNDS.minZ || z > BOUNDS.maxZ) {
-        return; 
+function rebuildPointCloud() {
+    if (rawScannedData.length === 0) return;
+
+    const positions = [];
+    const colors = [];
+    const colorObj = new THREE.Color();
+
+    let motorDelayMs = parseInt(document.getElementById('delaySlider').value);
+    let sweepTimeMs = parseInt(document.getElementById('speedSlider').value);
+    let initPitch = parseFloat(document.getElementById('initPitchSlider').value);
+    let pitchDrop = parseFloat(document.getElementById('pitchDropSlider').value);
+    let maxDistLimit = parseInt(document.getElementById('distSlider').value);
+    let edgeLimit = parseInt(document.getElementById('edgeSlider').value);
+    
+    const FULL_CYCLE_MS = sweepTimeMs + SWEEP_PAUSE_MS;
+
+    let lastValidVec = null;
+    let prevDist = Number(rawScannedData[0].d); 
+    
+    // Variables for Progress Tracker
+    let maxSweepAchieved = 0;
+    let maxTimeRunningMs = 0;
+
+    for (let i = 0; i < rawScannedData.length; i++) {
+        let pt = rawScannedData[i];
+        let moving_time_ms = pt.t - hardwareStartTime - motorDelayMs;
+
+        if (moving_time_ms < 0) continue; 
+
+        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
+        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
+        
+        // Track maximums for the Progress HUD
+        if (sweeps > maxSweepAchieved) maxSweepAchieved = sweeps;
+        if (moving_time_ms > maxTimeRunningMs) maxTimeRunningMs = moving_time_ms;
+        
+        let progress = time_in_sweep / sweepTimeMs;
+        let is_paused = (progress > 1.0);
+        if (is_paused) progress = 1.0;
+
+        let currentYaw = (sweeps % 2 === 0) ? progress * 360 : 360 - (progress * 360); 
+        let currentPitch = initPitch - (sweeps * pitchDrop); 
+
+        let distCm = Number(pt.d);
+        let deltaDist = Math.abs(distCm - prevDist);
+
+        // FILTER APPLIED: Max distance AND Edge Splitting (Mixed Pixel)
+        if (distCm > 15 && distCm <= maxDistLimit && !is_paused) { 
+            if (edgeLimit === 200 || deltaDist <= edgeLimit) {
+                
+                let radiusM = distCm / 100.0; 
+                let pitchRad = currentPitch * (Math.PI / 180);
+                
+                let y = radiusM * Math.sin(pitchRad) + YAW_HEIGHT_OFFSET_M;
+                let z = radiusM * Math.cos(pitchRad) + YAW_RADIUS_OFFSET_M;
+                let x = 0;
+
+                let vec = new THREE.Vector3(x, y, z);
+                vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), currentYaw * (Math.PI / 180));
+
+                positions.push(vec.x, vec.y, vec.z);
+
+                let hueCalc = (vec.y + 0.5) * 0.4; 
+                let hue = Math.max(0, Math.min(0.8, hueCalc));
+                colorObj.setHSL(hue, 1.0, 0.5);
+                colors.push(colorObj.r, colorObj.g, colorObj.b);
+
+                lastValidVec = vec;
+            }
+        }
+        prevDist = distCm; 
     }
 
-    const pointColor = new THREE.Color();
-    const hue = Math.abs(y % 1); 
-    pointColor.setHSL(hue, 1, 0.5);
+    // Apply Math to GPU
+    pointCloudGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    pointCloudGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    pointCloudGeometry.attributes.position.needsUpdate = true;
+    pointCloudGeometry.attributes.color.needsUpdate = true;
 
-    const geometry = new THREE.SphereGeometry(0.007, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: pointColor });
-    const sphere = new THREE.Mesh(geometry, material);
+    // UPDATE THE PROGRESS HUD
+    updateProgressHUD(maxSweepAchieved, maxTimeRunningMs, FULL_CYCLE_MS);
+
+    if (lastValidVec && document.getElementById("autoFollow").checked) {
+        controls.target.lerp(lastValidVec, 0.05);
+    }
+}
+
+// UPDATE PROGRESS UI LOGIC
+function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs) {
+    let displaySweep = Math.min(currentSweep, TARGET_SPINS);
+    let progressPct = (displaySweep / TARGET_SPINS) * 100;
     
-    sphere.position.set(x, y, z);
-    scene.add(sphere);
-
-    const newVec = new THREE.Vector3(x, y, z);
-    allPoints.push(newVec);
+    // Update Bar & Text
+    document.getElementById('scanProgressBar').style.width = progressPct + "%";
+    document.getElementById('scanProgressText').innerText = displaySweep + " / " + TARGET_SPINS + " Spins";
+    
+    // Calculate Time Remaining
+    let totalExpectedTimeMs = TARGET_SPINS * fullCycleMs;
+    let timeLeftMs = Math.max(0, totalExpectedTimeMs - runningTimeMs);
+    let timeLeftSecs = Math.floor(timeLeftMs / 1000);
+    
+    let minutes = Math.floor(timeLeftSecs / 60);
+    let seconds = timeLeftSecs % 60;
+    let timeString = `${minutes}:${seconds < 10 ? '0' : ''}${seconds} left`;
+    
+    if (displaySweep >= TARGET_SPINS) {
+        document.getElementById('scanProgressBar').classList.replace('bg-primary', 'bg-success');
+        document.getElementById('scanProgressBar').classList.remove('progress-bar-animated');
+        document.getElementById('scanTimeLeft').innerText = "Complete!";
+        document.getElementById('scanTimeLeft').className = "text-success fw-bold";
+    } else {
+        document.getElementById('scanProgressBar').classList.replace('bg-success', 'bg-primary');
+        document.getElementById('scanProgressBar').classList.add('progress-bar-animated');
+        document.getElementById('scanTimeLeft').innerText = timeString;
+        document.getElementById('scanTimeLeft').className = "text-info";
+    }
 }
 
 // ======================================================================
-// 5. READ LIDAR DATA FROM FIREBASE AND QUEUE IT
+// 5. READ DATA FROM FIREBASE
 // ======================================================================
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
     const batchData = snapshot.val();
     if (!batchData || !Array.isArray(batchData) || batchData.length === 0) return;
 
-    let batchMaxT = batchData[batchData.length - 1].t; 
-    if (batchMaxT === undefined) return;
-
-    if (batchMaxT < maxTimestampProcessed - 5000) {
+    if (batchData[0].t < maxTimestampProcessed - 10000) {
         maxTimestampProcessed = 0;
-        if (isScanning) ignoreOldData = true;
+        isFirstHardwarePoint = true; 
     }
 
-    if (ignoreOldData) {
-        maxTimestampProcessed = batchMaxT;
-        espTimeOffset = Date.now() - batchMaxT; 
-        ignoreOldData = false;
+    let addedNewPoints = false;
+
+    for (let i = 0; i < batchData.length; i++) {
+        let pt = batchData[i];
         
-        lastUpdateLocalTime = Date.now();
-        isHardwarePaused = false;
-        totalPausedTimeMs = 0;
-        return; 
-    }
-
-    let now = Date.now();
-    let timeSinceLastData = now - lastUpdateLocalTime;
-
-    if (batchMaxT > maxTimestampProcessed) {
-        if (isHardwarePaused) {
-            isHardwarePaused = false;
-            totalPausedTimeMs += (now - pauseStartTime);
+        if (pt.a && i === batchData.length - 1) {
+            let accPitch = Math.atan2(pt.a.z, pt.a.x) * (180 / Math.PI);
+            let accRoll = Math.atan2(pt.a.y, pt.a.x) * (180 / Math.PI);
+            document.getElementById("valB").innerText = Math.round(accPitch) + "°";
+            document.getElementById("valC").innerText = Math.round(accRoll) + "°";
         }
-        lastUpdateLocalTime = now;
-    } else {
-        if (!isHardwarePaused && timeSinceLastData > 2000) {
-            isHardwarePaused = true;
-            pauseStartTime = lastUpdateLocalTime + 2000;
+
+        if (pt.d !== undefined && pt.t > maxTimestampProcessed) {
+            if (isFirstHardwarePoint) {
+                hardwareStartTime = pt.t;
+                isFirstHardwarePoint = false;
+            }
+            rawScannedData.push(pt);
+            maxTimestampProcessed = pt.t;
+            addedNewPoints = true;
         }
     }
 
-    if (batchMaxT > maxTimestampProcessed) {
-        
-        let timeSinceLastBatch = batchMaxT - maxTimestampProcessed;
-        if (maxTimestampProcessed === 0 || timeSinceLastBatch > 10000) {
-            timeSinceLastBatch = 5000; 
-        }
-
-        let batchSize = batchData.length;
-        let startTime = batchMaxT - timeSinceLastBatch;
-
-        if (espTimeOffset === null) {
-            espTimeOffset = Date.now() - batchMaxT;
-        }
-
-        for (let i = 0; i < batchSize; i++) {
-            let dataPoint = batchData[i];
-            if (dataPoint.d === undefined) continue;
-
-            let interpolatedTime = startTime + (timeSinceLastBatch / batchSize) * i;
-
-            pointQueue.push({
-                ...dataPoint,
-                t: interpolatedTime 
-            });
-        }
-
-        maxTimestampProcessed = batchMaxT;
+    if (addedNewPoints) {
+        rebuildPointCloud(); 
+        document.getElementById("valDist").innerText = rawScannedData[rawScannedData.length - 1].d + "cm";
     }
 });
 
 // ======================================================================
-// 6. PROCESS A SINGLE POINT (PERFECT SYNC MAPPING)
-// ======================================================================
-
-function processPoint(dataPoint) {
-    if (!isScanning) return;
-
-    if (dataPoint.g && dataPoint.a) {
-        let dt = 0.02; 
-        if (!isFirstMpuPoint && lastMpuTimestamp !== 0) {
-            dt = (dataPoint.t - lastMpuTimestamp) / 1000.0;
-            if (dt <= 0 || dt > 1.0) dt = 0.02; 
-        }
-        lastMpuTimestamp = dataPoint.t;
-
-        const gy = dataPoint.g.y; 
-        const gx = dataPoint.g.x; 
-        const gz = dataPoint.g.z; 
-
-        const accPitch = Math.atan2(dataPoint.a.z, dataPoint.a.x) * (180 / Math.PI);
-        const accRoll = Math.atan2(dataPoint.a.y, dataPoint.a.x) * (180 / Math.PI);
-
-        if (isFirstMpuPoint) {
-            mpuPitch = accPitch;
-            mpuRoll = accRoll; 
-            mpuYaw = 0;
-            isFirstMpuPoint = false;
-        } else {
-            mpuPitch = ALPHA * (mpuPitch + gy * dt) + (1 - ALPHA) * accPitch;
-            mpuRoll = ALPHA * (mpuRoll + gz * dt) + (1 - ALPHA) * accRoll;
-            mpuYaw += gx * dt; 
-        }
-    }
-
-    let absolute_point_time = dataPoint.t + espTimeOffset;
-    let moving_time_ms = absolute_point_time - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
-
-    let currentYaw = 0;
-    let currentPitch = INITIAL_PITCH_FROM_FLOOR;
-    let is_paused = false;
-
-    if (moving_time_ms > 0) {
-        const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
-        let sweeps = Math.floor(moving_time_ms / FULL_CYCLE_MS);
-        let time_in_sweep = moving_time_ms % FULL_CYCLE_MS;
-
-        is_paused = time_in_sweep >= STEPPER_TIME_PER_360_MS;
-        let progress = is_paused ? 1.0 : (time_in_sweep / STEPPER_TIME_PER_360_MS);
-
-        // SYNC FIX: Set to FALSE so the software maps back and forth with the bouncy motor
-        const CONTINUOUS_ROTATION = false; 
-
-        if (CONTINUOUS_ROTATION) {
-            currentYaw = progress * 360; 
-        } else {
-            currentYaw = sweeps % 2 === 0 ? progress * 360 : 360 - (progress * 360); 
-        }
-
-        currentPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
-    }
-
-    const distCm = Number(dataPoint.d);
-    document.getElementById("valDist").innerText = distCm + "cm";
-
-    if (distCm > 15 && distCm <= 1200 && !is_paused) { 
-        const radiusM = distCm / 100.0; 
-        let pitchRad = currentPitch * (Math.PI / 180);
-        
-        // 3D MATH FIX: Restored original trigonometric mapping for upward pointing LiDAR
-        // When pitch is 90 (Straight up), sin(90)=1 (Full height), cos(90)=0 (No depth)
-        let point = new THREE.Vector3(
-            0,
-            radiusM * Math.sin(pitchRad),  // Y (Height) 
-            radiusM * Math.cos(pitchRad)   // Z (Depth) 
-        );
-
-        point.y += YAW_HEIGHT_OFFSET_M; 
-        point.z += YAW_RADIUS_OFFSET_M; 
-
-        const yAxis = new THREE.Vector3(0, 1, 0);
-        point.applyAxisAngle(yAxis, currentYaw * (Math.PI / 180));
-
-        createDot(point.x, point.y, point.z);
-        lastValidPoint = point;
-    }
-
-    document.getElementById("valC").innerText = Math.round(mpuRoll) + "°"; 
-
-    if (lastValidPoint && document.getElementById("autoFollow").checked) {
-        controls.target.lerp(lastValidPoint, 0.05);
-    }
-}
-
-// ======================================================================
-// 7. CONTROLS & RESET FUNCTIONS
+// 6. CONTROLS & RESET
 // ======================================================================
 
 function resetScan() {
-    allPoints = [];
-    scanStartGlobalTime = 0;
-    espTimeOffset = null;
-    ignoreOldData = false;
-    pointQueue = []; 
-    lastValidPoint = null;
+    rawScannedData = [];
+    isFirstHardwarePoint = true;
+    hardwareStartTime = 0;
 
-    lastUpdateLocalTime = 0;
-    isHardwarePaused = false;
-    pauseStartTime = 0;
-    totalPausedTimeMs = 0;
-
-    mpuYaw = 0; mpuPitch = 0; mpuRoll = 0;
-    lastMpuTimestamp = 0;
-    isFirstMpuPoint = true;
-
-    for (let i = scene.children.length - 1; i >= 0; i--) {
-        const obj = scene.children[i];
-        if (obj.type === "Mesh" && obj !== grid && obj.name !== "originMarker") {
-            scene.remove(obj);
-            if(obj.geometry) obj.geometry.dispose();
-            if(obj.material) obj.material.dispose();
-        }
-    }
-
-    camera.position.set(0, 2, 5);
-    controls.target.set(0, 0, 0);
-    controls.update();
+    pointCloudGeometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+    pointCloudGeometry.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
     
-    document.getElementById("valA").innerText = "0.0°";
-    document.getElementById("valB").innerText = "0.0°";
     document.getElementById("valDist").innerText = "0cm";
-
-    const dbRef = firebase.database().ref('toAltera');
-    dbRef.set(1).catch(err => console.error("Firebase Set Error:", err));
+    
+    // Reset Progress UI
+    updateProgressHUD(0, 0, 5000);
+    
+    firebase.database().ref('toAltera').set(1);
 }
 
 window.onload = function() {
@@ -452,101 +412,34 @@ window.onload = function() {
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
-                scanStartGlobalTime = Date.now(); 
-                ignoreOldData = true; 
-                pointQueue = []; 
-                espTimeOffset = null;
-
-                lastUpdateLocalTime = Date.now();
-                isHardwarePaused = false;
-                pauseStartTime = 0;
-                totalPausedTimeMs = 0;
+                isFirstHardwarePoint = true; 
+                rawScannedData = []; 
+                updateProgressHUD(0, 0, 5000);
             }
             btn.innerText = "STOP SCAN";
-            btn.classList.remove('btn-primary');
-            btn.classList.add('btn-danger');
+            btn.classList.replace('btn-primary', 'btn-danger');
         } else {
             isScanning = false;
             btn.innerText = "START SCAN";
-            btn.classList.remove('btn-danger');
-            btn.classList.add('btn-primary');
+            btn.classList.replace('btn-danger', 'btn-primary');
         }
     });
 };
 
 function toggleScan() {
-    const dbRef = firebase.database().ref('toAltera');
-    if (!isScanning) {
-        dbRef.set(0); 
-    } else {
-        dbRef.set(2); 
-    }
+    firebase.database().ref('toAltera').set(!isScanning ? 0 : 2); 
 }
 
 // ======================================================================
-// 8. ANIMATION & ELASTIC QUEUE PROCESSING LOOP
+// 7. RENDER LOOP
 // ======================================================================
-
 function animate() {
     requestAnimationFrame(animate);
-
-    let now = Date.now();
-    let timeElapsed = now - lastDrawTime;
-
-    if (isScanning && !isHardwarePaused && scanStartGlobalTime > 0) {
-        let ui_elapsed = Date.now() - scanStartGlobalTime - totalPausedTimeMs - MOTOR_START_DELAY_MS;
-        let uiYaw = 0;
-        let uiPitch = INITIAL_PITCH_FROM_FLOOR;
-
-        if (ui_elapsed > 0) {
-            const FULL_CYCLE_MS = STEPPER_TIME_PER_360_MS + SWEEP_PAUSE_MS;
-            let sweeps = Math.floor(ui_elapsed / FULL_CYCLE_MS);
-            let time_in_sweep = ui_elapsed % FULL_CYCLE_MS;
-            
-            let progress = time_in_sweep < STEPPER_TIME_PER_360_MS ? time_in_sweep / STEPPER_TIME_PER_360_MS : 1.0;
-            
-            // UI SYNC FIX: Ensuring the UI numbers bounce back and forth just like the mapping math
-            const CONTINUOUS_ROTATION = false; 
-            if (CONTINUOUS_ROTATION) {
-                uiYaw = progress * 360; 
-            } else {
-                uiYaw = sweeps % 2 === 0 ? progress * 360 : 360 - (progress * 360); 
-            }
-            
-            uiPitch = INITIAL_PITCH_FROM_FLOOR - (sweeps * SERVO_DROP_PER_ROTATION); 
-        }
-
-        document.getElementById("valA").innerText = uiYaw.toFixed(1) + "°";
-        document.getElementById("valB").innerText = uiPitch.toFixed(1) + "°";
-    }
-
-    if (pointQueue.length > 0) {
-        let dynamicDrawInterval = 166; 
-
-        if (pointQueue.length > 60) dynamicDrawInterval = 5; 
-        else if (pointQueue.length > 40) dynamicDrawInterval = 50; 
-        else if (pointQueue.length > 20) dynamicDrawInterval = 120;
-        else if (pointQueue.length > 8) dynamicDrawInterval = 250; 
-        else dynamicDrawInterval = 400; 
-
-        while (timeElapsed > dynamicDrawInterval && pointQueue.length > 0) {
-            let nextDataPoint = pointQueue.shift();
-            processPoint(nextDataPoint);
-            timeElapsed -= dynamicDrawInterval;
-            lastDrawTime = now - timeElapsed; 
-        }
-    }
-
-    if (controls) {
-        controls.update(); 
-    }
-
+    if (controls) controls.update(); 
     renderer.render(scene, camera);
 }
-
 animate();
 
 </script>
-
 </body>
 </html>
