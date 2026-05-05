@@ -135,7 +135,7 @@
 
 <!-- RIGHT PANEL: PROGRESS HUD -->
 <div class="progress-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
-    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS (170°)</h6>
+    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS (135°)</h6>
     <div class="d-flex justify-content-between text-secondary mb-1" style="font-size: 0.75rem;">
         <span id="scanProgressText" class="fw-bold">0 / -- Spins</span>
         <span id="scanTimeLeft" class="text-info">--:-- left</span>
@@ -187,7 +187,7 @@ function promptAdmin() {
 const SWEEP_PAUSE_MS = 300; 
 const YAW_RADIUS_OFFSET_M = 0.055; 
 const YAW_HEIGHT_OFFSET_M = 0.04; 
-const TARGET_TOTAL_DROP_DEGREES = 170; // Physical hardware limit of the scanner
+const TARGET_TOTAL_DROP_DEGREES = 130; // Physical hardware limit of the scanner
 
 // This object is the "Brain" used by EVERYONE (Admins and regular viewers)
 let liveParams = {
