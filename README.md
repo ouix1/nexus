@@ -1,12 +1,17 @@
 ![QR](Screenshot%20from%202026-05-06%2021-48-41.png)
 
-_   _  _______    _   _  ____  
+https://ouix1.github.io/nexus/home
+
+https://ouix1.github.io/nexus/start
+```text
+  _   _  _______    _   _  ____  
  | \ | || ____|\ \/ /| | | |/ ___| 
- |  \| ||  _|   \  / | | | |\___ \                 
+ |  \| ||  _|   \  / | | | |\___ \ 
  | |\  || |___  /  \ | |_| | ___) |
  |_| \_||_____|/_/\_\ \___/ |____/ 
                                    
-  >-- LiDAR Room 3D Mapping --<
+      LiDAR Room Mapping Project
+      
 
 System Architecture Overview
 
@@ -42,7 +47,5 @@ An Altera FPGA, programmed in VHDL, acts as the central hardware controller. It 
 
     Buzzer: Provides immediate audible feedback for system readiness, state changes, and alerts.
 
-https://ouix1.github.io/nexus/home
 
-https://ouix1.github.io/nexus/start
 
