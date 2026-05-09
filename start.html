@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>LIDAR 3D Viewer - Secured Live Sync</title>
+  <title>LIDAR 3D Viewer - Perfect Sync</title>
   <style>
     body { margin: 0; overflow: hidden; background-color: #181818; }
   </style>
@@ -85,10 +85,21 @@
         </div>
     </div>
     
-    <button id="toggleBtn" onclick="toggleScan()" class="btn btn-primary w-100 mb-2 fw-bold shadow-sm">
-        START SCAN
+    <!-- SYSTEM CONTROLS -->
+    <button id="toggleBtn" onclick="toggleScan()" class="btn btn-primary w-100 mb-2 fw-bold shadow-sm" disabled>
+        START SCAN <i class="bi bi-lock"></i>
     </button>
-    <button onclick="resetScan()" class="btn btn-sm btn-outline-light w-100 mb-2">Reset System</button>
+    
+    <div class="row g-2 mb-2">
+        <div class="col-6">
+            <button id="resetBtn" onclick="resetScan()" class="btn btn-sm btn-outline-secondary w-100" disabled>Reset System</button>
+        </div>
+        <div class="col-6">
+            <button id="loadScanBtn" onclick="loadCloudScan(false)" class="btn btn-sm btn-outline-info w-100 fw-bold">
+                <i class="bi bi-cloud-download me-1"></i> LOAD DATA
+            </button>
+        </div>
+    </div>
 
     <!-- LIVE TUNING DROPDOWN (HIDDEN BY DEFAULT, REQUIRES PASSWORD) -->
     <div class="dropdown mt-3" id="tuningDropdownWrapper" style="display: none;">
@@ -123,6 +134,20 @@
                     <input type="range" class="form-range" id="edgeSlider" min="5" max="200" step="5" oninput="onAdminSliderMove()">
                     <div class="text-muted" style="font-size: 0.6rem;">Drops points that jump too fast</div>
                 </div>
+                
+                <!-- HOST MODE TOGGLE -->
+                <div class="col-12 mt-3 border-top border-secondary pt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-light small fw-bold"><i class="bi bi-hdd-network me-1"></i> Auto-Sync to Viewers</span>
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input bg-danger border-danger" type="checkbox" id="hostModeToggle" onchange="toggleHostMode()">
+                        </div>
+                    </div>
+                    <button id="adminBroadcastBtn" class="btn btn-warning w-100 btn-sm fw-bold transition-all" onclick="broadcastScan(false)">
+                        <i class="bi bi-cloud-upload me-1"></i> Push Scan Manually
+                    </button>
+                </div>
+                
             </div>
         </div>
     </div>
@@ -135,7 +160,7 @@
 
 <!-- RIGHT PANEL: PROGRESS HUD -->
 <div class="progress-panel bg-dark p-3 rounded-4 shadow-lg border border-secondary text-white">
-    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS (135°)</h6>
+    <h6 class="border-bottom border-secondary pb-2 mb-2 text-uppercase tracking-widest text-center text-light" style="font-size: 0.8rem;">SCAN PROGRESS (130°)</h6>
     <div class="d-flex justify-content-between text-secondary mb-1" style="font-size: 0.75rem;">
         <span id="scanProgressText" class="fw-bold">0 / -- Spins</span>
         <span id="scanTimeLeft" class="text-info">--:-- left</span>
@@ -167,15 +192,23 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 let isAuthenticated = false;
+let justStartedByMe = false; 
 
-// Prompts the user for the password when clicking the Padlock
 function promptAdmin() {
     let pwd = prompt("Enter Administrator Password for Live Calibration:");
     if (pwd === "sisma332") {
         isAuthenticated = true;
-        document.getElementById('adminLockBtn').style.display = 'none'; // Hide padlock
-        document.getElementById('tuningDropdownWrapper').style.display = 'block'; // Show dropdown
-        updateAdminUIFromParams(); // Populate sliders with current global params
+        document.getElementById('adminLockBtn').style.display = 'none'; 
+        document.getElementById('tuningDropdownWrapper').style.display = 'block'; 
+        
+        const startBtn = document.getElementById('toggleBtn');
+        startBtn.disabled = false;
+        
+        const resetBtn = document.getElementById('resetBtn');
+        resetBtn.disabled = false;
+        resetBtn.classList.replace('btn-outline-secondary', 'btn-outline-light');
+        
+        updateAdminUIFromParams(); 
     } else if (pwd !== null) {
         alert("Access Denied: Incorrect Password.");
     }
@@ -187,16 +220,16 @@ function promptAdmin() {
 const SWEEP_PAUSE_MS = 300; 
 const YAW_RADIUS_OFFSET_M = 0.055; 
 const YAW_HEIGHT_OFFSET_M = 0.04; 
-const TARGET_TOTAL_DROP_DEGREES = 130; // Physical hardware limit of the scanner
+const TARGET_TOTAL_DROP_DEGREES = 130; 
 
-// This object is the "Brain" used by EVERYONE (Admins and regular viewers)
 let liveParams = {
     delay: 300,
     speed: 5000,
     initPitch: 90,
     pitchDrop: 1.5,
     distLimit: 600,
-    edgeLimit: 40
+    edgeLimit: 40,
+    globalStartTime: 0 // The Master Sync Time 
 };
 
 // ======================================================================
@@ -226,24 +259,111 @@ scene.add(originMarker);
 let pointCloudGeometry = new THREE.BufferGeometry();
 let pointCloudMaterial = new THREE.PointsMaterial({ size: 0.025, vertexColors: true });
 let pointCloud = new THREE.Points(pointCloudGeometry, pointCloudMaterial);
-pointCloud.frustumCulled = false; // CAMERA FIX: Prevents points from disappearing when looking away!
+pointCloud.frustumCulled = false; 
 scene.add(pointCloud);
 
 let rawScannedData = []; 
 let isScanning = false;
 let maxTimestampProcessed = 0; 
-let hardwareStartTime = 0;
-let isFirstHardwarePoint = true;
 
 // ======================================================================
-// 4. LIVE TUNING SYNC ENGINE (DECOUPLED FROM UI)
+// 4. ADMIN CLOUD FUNCTIONS (HOST MODE & SNAPSHOTS)
 // ======================================================================
 
-// Triggered ONLY by the Admin physically moving a slider
+let hostInterval = null;
+
+function toggleHostMode() {
+    let isHost = document.getElementById('hostModeToggle').checked;
+    let btn = document.getElementById('adminBroadcastBtn');
+    
+    if (isHost) {
+        btn.classList.replace('btn-warning', 'btn-danger');
+        btn.classList.replace('btn-success', 'btn-danger'); 
+        btn.innerHTML = '<span class="spinner-grow spinner-grow-sm me-1" role="status" aria-hidden="true"></span> Hosting Live...';
+        
+        broadcastScan(true);
+        hostInterval = setInterval(() => {
+            if (isScanning && rawScannedData.length > 0) {
+                broadcastScan(true);
+            }
+        }, 5000);
+    } else {
+        clearInterval(hostInterval);
+        btn.classList.replace('btn-danger', 'btn-warning');
+        btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Push Scan Manually';
+    }
+}
+
+function broadcastScan(isAuto = false) {
+    if (!isAuthenticated || rawScannedData.length === 0) return;
+    
+    let btn = document.getElementById('adminBroadcastBtn');
+    if (!isAuto) btn.innerHTML = "Pushing to Cloud...";
+    
+    firebase.database().ref('/cloudScan').set(JSON.stringify(rawScannedData))
+        .then(() => {
+            if (!isAuto) {
+                btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Success!';
+                btn.classList.replace('btn-success', 'btn-warning'); 
+                setTimeout(() => { 
+                    if (!document.getElementById('hostModeToggle').checked) {
+                        btn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Push Scan Manually'; 
+                    }
+                }, 2000);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            if (!isAuto) btn.innerHTML = "Upload Failed";
+        });
+}
+
+function loadCloudScan(silent = false) {
+    let btn = document.getElementById('loadScanBtn');
+    if (!silent) btn.innerHTML = "Downloading...";
+    
+    firebase.database().ref('/cloudScan').once('value').then(snapshot => {
+        const data = snapshot.val();
+        if (data) {
+            try {
+                let parsedData = JSON.parse(data);
+                
+                // THE MERGE FIX: Seamlessly weaves live points and cloud points together uniquely by timestamp
+                let uniqueMap = new Map();
+                parsedData.forEach(p => uniqueMap.set(p.t, p));
+                rawScannedData.forEach(p => uniqueMap.set(p.t, p));
+                
+                rawScannedData = Array.from(uniqueMap.values()).sort((a, b) => a.t - b.t);
+                
+                if (rawScannedData.length > 0) {
+                     maxTimestampProcessed = rawScannedData[rawScannedData.length - 1].t;
+                }
+                
+                rebuildPointCloud();
+                if (!silent) btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Loaded!';
+            } catch (e) {
+                console.error(e);
+                if (!silent) btn.innerHTML = "Error parsing";
+            }
+        } else {
+            if (!silent) btn.innerHTML = "No Cloud Data";
+        }
+        
+        if (!silent) {
+            setTimeout(() => { 
+                btn.innerHTML = isScanning ? '<i class="bi bi-cloud-download me-1"></i> LOAD LIVE SCAN' : '<i class="bi bi-cloud-download me-1"></i> LOAD LAST SCAN'; 
+            }, 2000);
+        }
+    });
+}
+
+// ======================================================================
+// 5. LIVE TUNING SYNC ENGINE (DECOUPLED FROM UI)
+// ======================================================================
+
 function onAdminSliderMove() {
     if (!isAuthenticated) return;
 
-    // 1. Read sliders into the Global Brain
     liveParams.delay = parseInt(document.getElementById('delaySlider').value);
     liveParams.speed = parseInt(document.getElementById('speedSlider').value);
     liveParams.initPitch = parseFloat(document.getElementById('initPitchSlider').value);
@@ -251,39 +371,30 @@ function onAdminSliderMove() {
     liveParams.distLimit = parseInt(document.getElementById('distSlider').value);
     liveParams.edgeLimit = parseInt(document.getElementById('edgeSlider').value);
 
-    // 2. Update Admin text labels
     updateAdminUIFromParams();
-
-    // 3. Rebuild the Admin's 3D Cloud locally instantly
     rebuildPointCloud();
-
-    // 4. Broadcast changes to all other viewers via Firebase
     firebase.database().ref('/liveSync').set(liveParams);
 }
 
-// Triggered for EVERYONE when Firebase broadcasts new settings
 firebase.database().ref('/liveSync').on('value', snapshot => {
     const data = snapshot.val();
     if (data) {
-        // Update the global brain for all users
         liveParams.delay = parseInt(data.delay) || 300;
         liveParams.speed = parseInt(data.speed) || 5000;
         liveParams.initPitch = parseFloat(data.initPitch) || 90;
         liveParams.pitchDrop = parseFloat(data.pitchDrop) || 1.5;
         liveParams.distLimit = parseInt(data.distLimit) || 600;
         liveParams.edgeLimit = parseInt(data.edgeLimit) || 40;
+        liveParams.globalStartTime = parseInt(data.globalStartTime) || 0; 
 
-        // Rebuild the 3D Map for everyone based on new parameters
         rebuildPointCloud();
 
-        // If an Admin has the UI open, update their physical sliders so they match the remote broadcast
         if (isAuthenticated) {
             updateAdminUIFromParams();
         }
     }
 });
 
-// Updates the visible sliders and text labels (Only relevant for Admins)
 function updateAdminUIFromParams() {
     document.getElementById('delaySlider').value = liveParams.delay;
     document.getElementById('speedSlider').value = liveParams.speed;
@@ -300,28 +411,29 @@ function updateAdminUIFromParams() {
     document.getElementById('lblEdge').innerText = liveParams.edgeLimit == 200 ? "OFF" : liveParams.edgeLimit + "cm";
 }
 
-// Math Engine: Rebuilds 3D Points using pure JS variables (NO direct DOM dependencies)
 function rebuildPointCloud() {
     if (rawScannedData.length === 0) return;
+
+    // THE FAILSAFE FIX: If globalStartTime is missing (joined mid-scan), dynamically fall back to the first point!
+    let startT = liveParams.globalStartTime > 0 ? liveParams.globalStartTime : rawScannedData[0].t;
 
     const positions = [];
     const colors = [];
     const colorObj = new THREE.Color();
 
     const FULL_CYCLE_MS = liveParams.speed + SWEEP_PAUSE_MS;
-    
-    // Calculates how many 1.5 degree drops it takes to hit 170 degrees total
     const TARGET_SPINS = Math.ceil(TARGET_TOTAL_DROP_DEGREES / liveParams.pitchDrop); 
 
     let lastValidVec = null;
-    let prevDist = Number(rawScannedData[0].d); 
+    let prevDist = rawScannedData[0] && rawScannedData[0].d ? Number(rawScannedData[0].d) : 0; 
     
     let maxSweepAchieved = 0;
     let maxTimeRunningMs = 0;
 
     for (let i = 0; i < rawScannedData.length; i++) {
         let pt = rawScannedData[i];
-        let moving_time_ms = pt.t - hardwareStartTime - liveParams.delay;
+        
+        let moving_time_ms = pt.t - startT - liveParams.delay;
 
         if (moving_time_ms < 0) continue; 
 
@@ -339,6 +451,8 @@ function rebuildPointCloud() {
         let currentPitch = liveParams.initPitch - (sweeps * liveParams.pitchDrop); 
 
         let distCm = Number(pt.d);
+        if (isNaN(distCm)) continue;
+        
         let deltaDist = Math.abs(distCm - prevDist);
 
         if (distCm > 15 && distCm <= liveParams.distLimit && !is_paused) { 
@@ -400,6 +514,14 @@ function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs, targetSpins
         document.getElementById('scanProgressBar').classList.remove('progress-bar-animated');
         document.getElementById('scanTimeLeft').innerText = "Complete!";
         document.getElementById('scanTimeLeft').className = "text-success fw-bold";
+        
+        if (isAuthenticated && !document.getElementById('hostModeToggle').checked) {
+            let pushBtn = document.getElementById('adminBroadcastBtn');
+            if(pushBtn) {
+                pushBtn.classList.replace('btn-warning', 'btn-success');
+                pushBtn.innerHTML = '<i class="bi bi-cloud-upload me-1"></i> Push Final Scan!';
+            }
+        }
     } else {
         document.getElementById('scanProgressBar').classList.replace('bg-success', 'bg-primary');
         document.getElementById('scanProgressBar').classList.add('progress-bar-animated');
@@ -409,16 +531,26 @@ function updateProgressHUD(currentSweep, runningTimeMs, fullCycleMs, targetSpins
 }
 
 // ======================================================================
-// 5. READ LIDAR DATA FROM FIREBASE
+// 6. READ LIDAR DATA FROM FIREBASE (LIVE LISTENER)
 // ======================================================================
 
 firebase.database().ref("/fromAltera").on("value", snapshot => {
-    const batchData = snapshot.val();
-    if (!batchData || !Array.isArray(batchData) || batchData.length === 0) return;
+    let rawBatch = snapshot.val();
+    if (!rawBatch) return;
+
+    // THE JSON ARRAY FIX: Force corrupted JSON Objects back into a clean Array
+    let batchData = [];
+    if (Array.isArray(rawBatch)) {
+        batchData = rawBatch;
+    } else if (typeof rawBatch === 'object') {
+        batchData = Object.keys(rawBatch).sort((a,b) => Number(a) - Number(b)).map(k => rawBatch[k]);
+    }
+    
+    batchData = batchData.filter(p => p !== null && p !== undefined);
+    if (batchData.length === 0) return;
 
     if (batchData[0].t < maxTimestampProcessed - 10000) {
         maxTimestampProcessed = 0;
-        isFirstHardwarePoint = true; 
     }
 
     let addedNewPoints = false;
@@ -434,9 +566,10 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
         }
 
         if (pt.d !== undefined && pt.t > maxTimestampProcessed) {
-            if (isFirstHardwarePoint) {
-                hardwareStartTime = pt.t;
-                isFirstHardwarePoint = false;
+            if (justStartedByMe) {
+                liveParams.globalStartTime = pt.t;
+                firebase.database().ref('/liveSync').set(liveParams);
+                justStartedByMe = false; 
             }
             rawScannedData.push(pt);
             maxTimestampProcessed = pt.t;
@@ -451,14 +584,15 @@ firebase.database().ref("/fromAltera").on("value", snapshot => {
 });
 
 // ======================================================================
-// 6. CONTROLS & RESET
+// 7. CONTROLS & RESET
 // ======================================================================
 
 function resetScan() {
+    if (!isAuthenticated) return;
+    
     rawScannedData = [];
-    isFirstHardwarePoint = true;
-    hardwareStartTime = 0;
-
+    maxTimestampProcessed = 0;
+    
     pointCloudGeometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
     pointCloudGeometry.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
     
@@ -468,39 +602,76 @@ function resetScan() {
     updateProgressHUD(0, 0, 5000, targetSpins);
     
     firebase.database().ref('toAltera').set(1);
+    
+    liveParams.globalStartTime = 0;
+    firebase.database().ref('/liveSync').set(liveParams);
 }
+
+let isInitialLoad = true;
 
 window.onload = function() {
     const dbRef = firebase.database().ref('toAltera');
-    const btn = document.getElementById('toggleBtn');
+    const startBtn = document.getElementById('toggleBtn');
+    const loadBtn = document.getElementById('loadScanBtn');
 
     dbRef.on('value', (snapshot) => {
         const val = snapshot.val();
         if (val === 0) {
             if (!isScanning) {
                 isScanning = true;
-                isFirstHardwarePoint = true; 
-                rawScannedData = []; 
+                
+                // THE DATA WIPE FIX: Only wipe the array if a user physically clicked the start button. 
+                // If the page just loaded mid-scan, keep the data intact!
+                if (!isInitialLoad) {
+                    rawScannedData = []; 
+                    maxTimestampProcessed = 0;
+                }
                 
                 let targetSpins = Math.ceil(TARGET_TOTAL_DROP_DEGREES / liveParams.pitchDrop);
                 updateProgressHUD(0, 0, 5000, targetSpins);
+                
+                // THE AUTO-LOAD FIX: Automatically pull the host's background snapshot if we join mid-scan
+                if (isInitialLoad) {
+                    loadCloudScan(true); 
+                }
             }
-            btn.innerText = "STOP SCAN";
-            btn.classList.replace('btn-primary', 'btn-danger');
+            
+            startBtn.classList.remove('btn-primary', 'btn-secondary');
+            startBtn.classList.add('btn-danger');
+            startBtn.innerHTML = `STOP SCAN ${!isAuthenticated ? '<i class="bi bi-lock"></i>' : ''}`;
+            startBtn.disabled = !isAuthenticated; 
+            
+            loadBtn.innerHTML = '<i class="bi bi-cloud-download me-1"></i> LOAD LIVE SCAN';
+            
         } else {
             isScanning = false;
-            btn.innerText = "START SCAN";
-            btn.classList.replace('btn-danger', 'btn-primary');
+            
+            startBtn.classList.remove('btn-danger', 'btn-secondary');
+            startBtn.classList.add('btn-primary');
+            startBtn.innerHTML = `START SCAN ${!isAuthenticated ? '<i class="bi bi-lock"></i>' : ''}`;
+            startBtn.disabled = !isAuthenticated; 
+            
+            loadBtn.innerHTML = '<i class="bi bi-cloud-download me-1"></i> LOAD LAST SCAN';
         }
+        
+        isInitialLoad = false;
     });
 };
 
 function toggleScan() {
-    firebase.database().ref('toAltera').set(!isScanning ? 0 : 2); 
+    if (!isAuthenticated) return;
+    
+    let newCommand = !isScanning ? 0 : 2;
+    
+    if (newCommand === 0) {
+        justStartedByMe = true; 
+    }
+    
+    firebase.database().ref('toAltera').set(newCommand); 
 }
 
 // ======================================================================
-// 7. RENDER LOOP
+// 8. RENDER LOOP
 // ======================================================================
 function animate() {
     requestAnimationFrame(animate);
